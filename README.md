@@ -2,6 +2,8 @@
 
 インタラクティブ・フラクタル生成ツール。基本図形と複製ルールを対話的に編集することで、自己相似フラクタルをリアルタイムに生成・閲覧できる。
 
+https://github.com/user-attachments/assets/72efb82c-006f-4da5-bf7b-f2ffbdc30293
+
 ## 必要環境
 
 - Rust toolchain（edition 2024 対応版、`rustup` 推奨）
