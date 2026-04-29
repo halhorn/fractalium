@@ -89,6 +89,26 @@ impl Replica {
     }
 }
 
+/// Undo history for discrete user actions (line confirm, clear, replica add/delete).
+/// Continuous DragValue edits are not captured.
+#[derive(Resource, Default)]
+pub struct UndoStack {
+    history: Vec<FractalState>,
+}
+
+impl UndoStack {
+    pub fn push(&mut self, state: FractalState) {
+        if self.history.len() >= 50 {
+            self.history.remove(0);
+        }
+        self.history.push(state);
+    }
+
+    pub fn pop(&mut self) -> Option<FractalState> {
+        self.history.pop()
+    }
+}
+
 impl FractalState {
     pub fn default_mvp() -> Self {
         Self {

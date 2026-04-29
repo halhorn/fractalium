@@ -1,9 +1,11 @@
+use bevy::camera::Projection;
+use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
-use crate::state::{FractalState, Line, Replica};
-use crate::{EditCamera, edit_layer, result_layer};
+use crate::state::{FractalState, Line, Replica, UndoStack};
+use crate::{EditCamera, ResultCamera, edit_layer, result_layer};
 
 /// Drag-in-progress state for the Edit canvas. Confirmed lines live in
 /// `FractalState::base_shape.lines`; only the in-flight start point lives here.
@@ -21,14 +23,15 @@ pub enum DrawState {
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct EditGizmos;
 
-const MIN_LINE_LEN: f32 = 0.01;
-const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);
-const PREVIEW_COLOR: Color = Color::srgb(1.0, 0.8, 0.4);
-const FRACTAL_COLOR: Color = Color::srgb(0.85, 0.95, 0.9);
-
 /// Gizmo group dedicated to the Result canvas.
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct ResultGizmos;
+
+const MIN_LINE_LEN: f32 = 0.01;
+const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);
+const PREVIEW_COLOR: Color = Color::srgb(1.0, 0.8, 0.4);
+const SNAP_PREVIEW_COLOR: Color = Color::srgb(0.4, 1.0, 0.6);
+const FRACTAL_COLOR: Color = Color::srgb(0.85, 0.95, 0.9);
 
 pub struct DrawPlugin;
 
@@ -46,15 +49,18 @@ impl Plugin for DrawPlugin {
         };
 
         app.init_resource::<DrawState>()
+            .init_resource::<UndoStack>()
             .insert_gizmo_config(EditGizmos, config)
             .insert_gizmo_config(ResultGizmos, result_config)
             .add_systems(
                 Update,
                 (
+                    handle_undo,
                     handle_drag_input,
                     draw_lines,
                     draw_replicas,
                     draw_fractal_result,
+                    zoom_result,
                 )
                     .chain(),
             );
@@ -75,11 +81,40 @@ fn cursor_in_edit(
         .ok()
 }
 
+/// Snap the endpoint so the direction from `start` to `end` is a multiple of 45°.
+fn snap_to_45(start: Vec2, end: Vec2) -> Vec2 {
+    let delta = end - start;
+    if delta.length_squared() < f32::EPSILON {
+        return end;
+    }
+    let angle = delta.y.atan2(delta.x);
+    let snapped = (angle / std::f32::consts::FRAC_PI_4).round() * std::f32::consts::FRAC_PI_4;
+    start + Vec2::new(snapped.cos(), snapped.sin()) * delta.length()
+}
+
+fn handle_undo(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<FractalState>,
+    mut undo_stack: ResMut<UndoStack>,
+    mut draw_state: ResMut<DrawState>,
+) {
+    let cmd = keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight);
+    if cmd
+        && keys.just_pressed(KeyCode::KeyZ)
+        && let Some(prev) = undo_stack.pop()
+    {
+        *state = prev;
+        *draw_state = DrawState::Idle;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle_drag_input(
     mut draw_state: ResMut<DrawState>,
     mut state: ResMut<FractalState>,
+    mut undo_stack: ResMut<UndoStack>,
     buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     edit_cam: Query<(&Camera, &GlobalTransform), With<EditCamera>>,
     mut contexts: EguiContexts,
@@ -108,10 +143,17 @@ fn handle_drag_input(
     if buttons.just_released(MouseButton::Left)
         && let DrawState::Dragging { start } = *draw_state
     {
-        if let Some(end) = cursor
-            && (end - start).length() >= MIN_LINE_LEN
-        {
-            state.base_shape.lines.push(Line { a: start, b: end });
+        if let Some(raw_end) = cursor {
+            let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+            let end = if shift {
+                snap_to_45(start, raw_end)
+            } else {
+                raw_end
+            };
+            if (end - start).length() >= MIN_LINE_LEN {
+                undo_stack.push(state.clone());
+                state.base_shape.lines.push(Line { a: start, b: end });
+            }
         }
         *draw_state = DrawState::Idle;
     }
@@ -120,6 +162,7 @@ fn handle_drag_input(
 fn draw_lines(
     state: Res<FractalState>,
     draw_state: Res<DrawState>,
+    keys: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     edit_cam: Query<(&Camera, &GlobalTransform), With<EditCamera>>,
     mut gizmos: Gizmos<EditGizmos>,
@@ -131,9 +174,15 @@ fn draw_lines(
     if let DrawState::Dragging { start } = *draw_state
         && let Ok(window) = windows.single()
         && let Ok((cam, cam_tf)) = edit_cam.single()
-        && let Some(end) = cursor_in_edit(window, cam, cam_tf)
+        && let Some(raw_end) = cursor_in_edit(window, cam, cam_tf)
     {
-        gizmos.line_2d(start, end, PREVIEW_COLOR);
+        let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+        let (end, color) = if shift {
+            (snap_to_45(start, raw_end), SNAP_PREVIEW_COLOR)
+        } else {
+            (raw_end, PREVIEW_COLOR)
+        };
+        gizmos.line_2d(start, end, color);
     }
 }
 
@@ -192,5 +241,33 @@ fn draw_replicas(state: Res<FractalState>, mut gizmos: Gizmos<EditGizmos>) {
         gizmos.line_2d(pts[1], pts[2], color);
         gizmos.line_2d(pts[2], pts[3], color);
         gizmos.line_2d(pts[3], pts[0], color);
+    }
+}
+
+fn zoom_result(
+    scroll: Res<AccumulatedMouseScroll>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut result_cam_q: Query<(&Camera, &GlobalTransform, &mut Projection), With<ResultCamera>>,
+) {
+    let total = scroll.delta.y;
+    if total == 0.0 {
+        return;
+    }
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf, mut proj)) = result_cam_q.single_mut() else {
+        return;
+    };
+    // Only zoom when cursor is inside the Result viewport.
+    let cursor_in_result = window
+        .cursor_position()
+        .and_then(|p| cam.viewport_to_world_2d(cam_tf, p).ok())
+        .is_some();
+    if !cursor_in_result {
+        return;
+    }
+    if let Projection::Orthographic(ref mut ortho) = *proj {
+        ortho.scale = (ortho.scale * (1.0 - total * 0.1)).clamp(0.2, 8.0);
     }
 }

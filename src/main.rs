@@ -10,7 +10,7 @@ use bevy_egui::{
     EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext, egui,
 };
 use draw::DrawPlugin;
-use state::{FractalState, Replica};
+use state::{FractalState, Replica, UndoStack};
 
 #[derive(Component)]
 pub struct EditCamera;
@@ -132,10 +132,12 @@ fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers) {
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn params_panel(
     mut contexts: EguiContexts,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut state: ResMut<FractalState>,
+    mut undo_stack: ResMut<UndoStack>,
     mut edit_cam: Query<&mut Camera, (With<EditCamera>, Without<ResultCamera>)>,
     mut result_cam: Query<&mut Camera, (With<ResultCamera>, Without<EditCamera>)>,
 ) -> Result {
@@ -147,15 +149,17 @@ fn params_panel(
         .show(ctx, |ui| {
             ui.heading("Parameters");
             ui.separator();
-            ui.add(egui::Slider::new(&mut state.depth, 1..=7).text("Depth"));
+            ui.add(egui::Slider::new(&mut state.depth, 1..=12).text("Depth"));
             ui.separator();
             ui.label(format!("Lines: {}", state.base_shape.lines.len()));
             if ui.button("Clear lines").clicked() {
+                undo_stack.push(state.clone());
                 state.base_shape.lines.clear();
             }
             ui.separator();
             ui.label(format!("Replicas: {}", state.replicas.len()));
             if ui.button("+ Add replica").clicked() {
+                undo_stack.push(state.clone());
                 state.replicas.push(Replica::default_new());
             }
             ui.separator();
@@ -207,6 +211,7 @@ fn params_panel(
                     });
             }
             if let Some(i) = to_delete {
+                undo_stack.push(state.clone());
                 state.replicas.remove(i);
             }
         })
