@@ -298,6 +298,10 @@ fn hue_to_color(hue: f32) -> Color {
     Color::from(lin)
 }
 
+pub fn replica_color(i: usize) -> LinearRgba {
+    LinearRgba::from(Hsla::new((i as f32 * 137.508) % 360.0, 0.85, 0.60, 1.0))
+}
+
 fn draw_fractal_result(state: Res<FractalState>, mut gizmos: Gizmos<ResultGizmos>) {
     let mut segments: Vec<(Vec2, Vec2, f32)> = Vec::new();
     // hue_step=360 means the first level divides the full hue wheel among its replicas.
@@ -352,22 +356,12 @@ fn collect_fractal_segments(
 }
 
 fn draw_replicas(state: Res<FractalState>, mut gizmos: Gizmos<EditGizmos>) {
-    let Some(bbox) = state.base_shape.bbox() else {
-        return;
-    };
-    let corners = [
-        Vec2::new(bbox.min.x, bbox.min.y),
-        Vec2::new(bbox.max.x, bbox.min.y),
-        Vec2::new(bbox.max.x, bbox.max.y),
-        Vec2::new(bbox.min.x, bbox.max.y),
-    ];
-    let color = Color::srgba(0.4, 0.7, 1.0, 0.6);
-    for replica in &state.replicas {
-        let pts: [Vec2; 4] = corners.map(|c| replica.apply(c));
-        gizmos.line_2d(pts[0], pts[1], color);
-        gizmos.line_2d(pts[1], pts[2], color);
-        gizmos.line_2d(pts[2], pts[3], color);
-        gizmos.line_2d(pts[3], pts[0], color);
+    for (i, replica) in state.replicas.iter().enumerate() {
+        let lin = replica_color(i);
+        let color = Color::from(LinearRgba::new(lin.red, lin.green, lin.blue, 0.6));
+        for line in &state.base_shape.lines {
+            gizmos.line_2d(replica.apply(line.a), replica.apply(line.b), color);
+        }
     }
 }
 

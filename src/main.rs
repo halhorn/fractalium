@@ -166,7 +166,14 @@ fn params_panel(
 
             let mut to_delete: Option<usize> = None;
             for (i, replica) in state.replicas.iter_mut().enumerate() {
-                egui::CollapsingHeader::new(format!("Replica {i}"))
+                let lin = draw::replica_color(i);
+                let egui_color = egui::Color32::from_rgb(
+                    (lin.red.powf(1.0 / 2.2) * 255.0) as u8,
+                    (lin.green.powf(1.0 / 2.2) * 255.0) as u8,
+                    (lin.blue.powf(1.0 / 2.2) * 255.0) as u8,
+                );
+                let title = egui::RichText::new(format!("Replica {i}")).color(egui_color).strong();
+                egui::CollapsingHeader::new(title)
                     .default_open(true)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
