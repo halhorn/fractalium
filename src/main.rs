@@ -1,3 +1,4 @@
+mod draw;
 mod state;
 
 use bevy::camera::{
@@ -8,18 +9,19 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{
     EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext, egui,
 };
-use state::FractalState;
+use draw::DrawPlugin;
+use state::{FractalState, Replica};
 
 #[derive(Component)]
-struct EditCamera;
+pub struct EditCamera;
 
 #[derive(Component)]
-struct ResultCamera;
+pub struct ResultCamera;
 
-fn edit_layer() -> RenderLayers {
+pub fn edit_layer() -> RenderLayers {
     RenderLayers::layer(1)
 }
-fn result_layer() -> RenderLayers {
+pub fn result_layer() -> RenderLayers {
     RenderLayers::layer(2)
 }
 
@@ -34,6 +36,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .add_plugins(DrawPlugin)
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
         .insert_resource(FractalState::default_mvp())
         .add_systems(Startup, setup)
@@ -89,11 +92,11 @@ fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
         },
     ));
 
-    spawn_canvas_decor(&mut commands, edit_layer(), "Edit");
-    spawn_canvas_decor(&mut commands, result_layer(), "Result");
+    spawn_canvas_decor(&mut commands, edit_layer());
+    spawn_canvas_decor(&mut commands, result_layer());
 }
 
-fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers, label: &str) {
+fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers) {
     let frame_color = Color::srgb(0.45, 0.45, 0.55);
     let frame_thickness = 0.01;
 
@@ -125,18 +128,6 @@ fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers, label: &str)
     commands.spawn((
         Sprite::from_color(cross_color, Vec2::new(cross_thickness, cross_arm * 2.0)),
         Transform::from_xyz(0.0, 0.0, 0.0),
-        layer.clone(),
-    ));
-
-    // Placeholder label, scaled into world units. Removed when Features land.
-    commands.spawn((
-        Text2d::new(label),
-        TextFont {
-            font_size: 48.0,
-            ..default()
-        },
-        TextColor(Color::srgb(0.7, 0.7, 0.8)),
-        Transform::from_xyz(0.0, 0.7, 0.0).with_scale(Vec3::splat(0.004)),
         layer,
     ));
 }
@@ -159,7 +150,65 @@ fn params_panel(
             ui.add(egui::Slider::new(&mut state.depth, 1..=7).text("Depth"));
             ui.separator();
             ui.label(format!("Lines: {}", state.base_shape.lines.len()));
+            if ui.button("Clear lines").clicked() {
+                state.base_shape.lines.clear();
+            }
+            ui.separator();
             ui.label(format!("Replicas: {}", state.replicas.len()));
+            if ui.button("+ Add replica").clicked() {
+                state.replicas.push(Replica::default_new());
+            }
+            ui.separator();
+
+            let mut to_delete: Option<usize> = None;
+            for (i, replica) in state.replicas.iter_mut().enumerate() {
+                egui::CollapsingHeader::new(format!("Replica {i}"))
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("TX");
+                            ui.add(
+                                egui::DragValue::new(&mut replica.translation.x)
+                                    .speed(0.01)
+                                    .range(-2.0..=2.0),
+                            );
+                            ui.label("TY");
+                            ui.add(
+                                egui::DragValue::new(&mut replica.translation.y)
+                                    .speed(0.01)
+                                    .range(-2.0..=2.0),
+                            );
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Rot (deg)");
+                            let mut deg = replica.rotation.to_degrees();
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut deg)
+                                        .speed(0.5)
+                                        .range(-180.0..=180.0),
+                                )
+                                .changed()
+                            {
+                                replica.rotation = deg.to_radians();
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Scale");
+                            ui.add(
+                                egui::DragValue::new(&mut replica.scale)
+                                    .speed(0.005)
+                                    .range(0.05..=2.0),
+                            );
+                        });
+                        if ui.button("Delete this replica").clicked() {
+                            to_delete = Some(i);
+                        }
+                    });
+            }
+            if let Some(i) = to_delete {
+                state.replicas.remove(i);
+            }
         })
         .response
         .rect

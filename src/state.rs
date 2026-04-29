@@ -1,5 +1,4 @@
-// Fields populated and consumed by upcoming Feat1 (line drawing),
-// Feat2 (replica editing), Feat3 (recursive render). Allow until then.
+// Replica fields are used in Feat2+ but some may trigger dead_code for future Feat3.
 #![allow(dead_code)]
 
 use bevy::prelude::*;
@@ -20,6 +19,17 @@ pub struct BaseShape {
     pub lines: Vec<Line>,
 }
 
+impl BaseShape {
+    /// Axis-aligned bounding box of all line endpoints. Returns `None` when there
+    /// are no lines.
+    pub fn bbox(&self) -> Option<Rect> {
+        let mut pts = self.lines.iter().flat_map(|l| [l.a, l.b]);
+        let first = pts.next()?;
+        let (min, max) = pts.fold((first, first), |(mn, mx), p| (mn.min(p), mx.max(p)));
+        Some(Rect::from_corners(min, max))
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Line {
     pub a: Vec2,
@@ -32,7 +42,51 @@ pub struct Line {
 pub struct Replica {
     pub translation: Vec2,
     pub rotation: f32, // radians
-    pub scale: f32,
+    pub scale: f32,    // must be > 0
+}
+
+impl Replica {
+    pub fn default_new() -> Self {
+        Self {
+            translation: Vec2::ZERO,
+            rotation: 0.0,
+            scale: 0.5,
+        }
+    }
+
+    pub fn identity() -> Self {
+        Self {
+            translation: Vec2::ZERO,
+            rotation: 0.0,
+            scale: 1.0,
+        }
+    }
+
+    /// Apply scale → rotate → translate to a point in base-shape space.
+    pub fn apply(&self, p: Vec2) -> Vec2 {
+        let scaled = p * self.scale;
+        let angle = self.rotation;
+        let rotated = Vec2::new(
+            scaled.x * angle.cos() - scaled.y * angle.sin(),
+            scaled.x * angle.sin() + scaled.y * angle.cos(),
+        );
+        rotated + self.translation
+    }
+
+    /// Compose transforms: returns `c` where `c.apply(p) == self.apply(other.apply(p))`.
+    pub fn compose(self, other: Replica) -> Replica {
+        let cos_s = self.rotation.cos();
+        let sin_s = self.rotation.sin();
+        let rot_t = Vec2::new(
+            other.translation.x * cos_s - other.translation.y * sin_s,
+            other.translation.x * sin_s + other.translation.y * cos_s,
+        );
+        Replica {
+            translation: self.translation + self.scale * rot_t,
+            rotation: self.rotation + other.rotation,
+            scale: self.scale * other.scale,
+        }
+    }
 }
 
 impl FractalState {
