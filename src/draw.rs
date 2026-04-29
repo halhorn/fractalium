@@ -1,4 +1,5 @@
 use bevy::camera::Projection;
+use bevy::color::Hsla;
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -31,26 +32,26 @@ const MIN_LINE_LEN: f32 = 0.01;
 const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);
 const PREVIEW_COLOR: Color = Color::srgb(1.0, 0.8, 0.4);
 const SNAP_PREVIEW_COLOR: Color = Color::srgb(0.4, 1.0, 0.6);
-const FRACTAL_COLOR: Color = Color::srgb(0.85, 0.95, 0.9);
 
 pub struct DrawPlugin;
 
 impl Plugin for DrawPlugin {
     fn build(&self, app: &mut App) {
-        let mut config = bevy::gizmos::config::GizmoConfig {
+        let mut edit_config = bevy::gizmos::config::GizmoConfig {
             render_layers: edit_layer(),
             ..Default::default()
         };
-        config.line.width = 2.0;
+        edit_config.line.width = 2.0;
 
-        let result_config = bevy::gizmos::config::GizmoConfig {
+        let mut result_config = bevy::gizmos::config::GizmoConfig {
             render_layers: result_layer(),
             ..Default::default()
         };
+        result_config.line.width = 2.0;
 
         app.init_resource::<DrawState>()
             .init_resource::<UndoStack>()
-            .insert_gizmo_config(EditGizmos, config)
+            .insert_gizmo_config(EditGizmos, edit_config)
             .insert_gizmo_config(ResultGizmos, result_config)
             .add_systems(
                 Update,
@@ -67,9 +68,6 @@ impl Plugin for DrawPlugin {
     }
 }
 
-/// Convert the cursor's window position into the Edit canvas's normalized
-/// [-1, 1] coordinate. Returns `None` when the cursor is outside the Edit
-/// camera's viewport (or there is no cursor).
 fn cursor_in_edit(
     window: &Window,
     edit_cam: &Camera,
@@ -81,7 +79,6 @@ fn cursor_in_edit(
         .ok()
 }
 
-/// Snap the endpoint so the direction from `start` to `end` is a multiple of 45°.
 fn snap_to_45(start: Vec2, end: Vec2) -> Vec2 {
     let delta = end - start;
     if delta.length_squared() < f32::EPSILON {
@@ -186,41 +183,61 @@ fn draw_lines(
     }
 }
 
+fn hue_to_color(hue: f32) -> Color {
+    let lin = LinearRgba::from(Hsla::new(hue % 360.0, 0.88, 0.58, 1.0));
+    Color::from(lin)
+}
+
 fn draw_fractal_result(state: Res<FractalState>, mut gizmos: Gizmos<ResultGizmos>) {
-    draw_fractal_recursive(
+    let mut segments: Vec<(Vec2, Vec2, f32)> = Vec::new();
+    // hue_step=360 means the first level divides the full hue wheel among its replicas.
+    collect_fractal_segments(
         state.depth,
         Replica::identity(),
         &state.base_shape.lines,
         &state.replicas,
-        &mut gizmos,
+        &mut segments,
+        0.0,
+        360.0,
     );
+    for &(a, b, hue) in &segments {
+        gizmos.line_2d(a, b, hue_to_color(hue));
+    }
 }
 
-fn draw_fractal_recursive(
+/// Recursively collect leaf line segments with per-branch hue assignment.
+///
+/// `hue` is the base hue for this subtree. `hue_step` is the total hue range
+/// allocated to this subtree; each replica sub-divides it evenly so that the
+/// top-level replicas span the full 360° wheel and deeper levels narrow their
+/// slice proportionally.
+fn collect_fractal_segments(
     depth: u32,
     transform: Replica,
     lines: &[Line],
     replicas: &[Replica],
-    gizmos: &mut Gizmos<ResultGizmos>,
+    out: &mut Vec<(Vec2, Vec2, f32)>,
+    hue: f32,
+    hue_step: f32,
 ) {
     if depth <= 1 {
         for line in lines {
-            gizmos.line_2d(
-                transform.apply(line.a),
-                transform.apply(line.b),
-                FRACTAL_COLOR,
-            );
+            out.push((transform.apply(line.a), transform.apply(line.b), hue));
         }
-    } else {
-        for replica in replicas {
-            draw_fractal_recursive(
-                depth - 1,
-                transform.compose(*replica),
-                lines,
-                replicas,
-                gizmos,
-            );
-        }
+        return;
+    }
+    let n = replicas.len() as f32;
+    let child_step = hue_step / n;
+    for (i, replica) in replicas.iter().enumerate() {
+        collect_fractal_segments(
+            depth - 1,
+            transform.compose(*replica),
+            lines,
+            replicas,
+            out,
+            hue + i as f32 * child_step,
+            child_step,
+        );
     }
 }
 
@@ -259,7 +276,6 @@ fn zoom_result(
     let Ok((cam, cam_tf, mut proj)) = result_cam_q.single_mut() else {
         return;
     };
-    // Only zoom when cursor is inside the Result viewport.
     let cursor_in_result = window
         .cursor_position()
         .and_then(|p| cam.viewport_to_world_2d(cam_tf, p).ok())
