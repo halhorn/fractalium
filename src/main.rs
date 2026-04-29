@@ -1,4 +1,6 @@
-use bevy::camera::{Viewport, visibility::RenderLayers};
+use bevy::camera::{
+    OrthographicProjection, Projection, ScalingMode, Viewport, visibility::RenderLayers,
+};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{
@@ -11,9 +13,12 @@ struct EditCamera;
 #[derive(Component)]
 struct ResultCamera;
 
-// Spatial offset so each camera only sees its own area's content
-// (cheap separation without RenderLayers for the MVP skeleton).
-const RESULT_AREA_OFFSET_X: f32 = 10_000.0;
+fn edit_layer() -> RenderLayers {
+    RenderLayers::layer(1)
+}
+fn result_layer() -> RenderLayers {
+    RenderLayers::layer(2)
+}
 
 fn main() {
     App::new()
@@ -32,10 +37,17 @@ fn main() {
         .run();
 }
 
+fn normalized_projection() -> Projection {
+    Projection::Orthographic(OrthographicProjection {
+        scaling_mode: ScalingMode::AutoMin {
+            min_width: 2.0,
+            min_height: 2.0,
+        },
+        ..OrthographicProjection::default_2d()
+    })
+}
+
 fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
-    // Disable auto-create so we can attach `PrimaryEguiContext` to a dedicated
-    // full-window UI camera. Without this, egui anchors to one of our viewport-
-    // limited world cameras and SidePanel positions break.
     egui_global.auto_create_primary_context = false;
 
     commands.spawn((
@@ -45,7 +57,8 @@ fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
             order: 0,
             ..default()
         },
-        Transform::from_xyz(0.0, 0.0, 0.0),
+        normalized_projection(),
+        edit_layer(),
     ));
 
     commands.spawn((
@@ -55,7 +68,8 @@ fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
             order: 1,
             ..default()
         },
-        Transform::from_xyz(RESULT_AREA_OFFSET_X, 0.0, 0.0),
+        normalized_projection(),
+        result_layer(),
     ));
 
     // Dedicated egui camera: covers the full window, renders no world content,
@@ -71,24 +85,55 @@ fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
         },
     ));
 
-    let label_color = TextColor(Color::srgb(0.7, 0.7, 0.8));
-    let label_font = TextFont {
-        font_size: 48.0,
-        ..default()
-    };
+    spawn_canvas_decor(&mut commands, edit_layer(), "Edit");
+    spawn_canvas_decor(&mut commands, result_layer(), "Result");
+}
 
+fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers, label: &str) {
+    let frame_color = Color::srgb(0.45, 0.45, 0.55);
+    let frame_thickness = 0.01;
+
+    // Unit-square frame at [-1, 1] x [-1, 1].
+    let sides = [
+        // (size, position)
+        (Vec2::new(2.0, frame_thickness), Vec3::new(0.0, 1.0, 0.0)), // top
+        (Vec2::new(2.0, frame_thickness), Vec3::new(0.0, -1.0, 0.0)), // bottom
+        (Vec2::new(frame_thickness, 2.0), Vec3::new(-1.0, 0.0, 0.0)), // left
+        (Vec2::new(frame_thickness, 2.0), Vec3::new(1.0, 0.0, 0.0)), // right
+    ];
+    for (size, pos) in sides {
+        commands.spawn((
+            Sprite::from_color(frame_color, size),
+            Transform::from_translation(pos),
+            layer.clone(),
+        ));
+    }
+
+    // Origin cross marker: small crosshair at (0, 0).
+    let cross_color = Color::srgb(0.6, 0.6, 0.7);
+    let cross_arm = 0.05;
+    let cross_thickness = 0.005;
     commands.spawn((
-        Text2d::new("Edit"),
-        label_font.clone(),
-        label_color,
+        Sprite::from_color(cross_color, Vec2::new(cross_arm * 2.0, cross_thickness)),
         Transform::from_xyz(0.0, 0.0, 0.0),
+        layer.clone(),
+    ));
+    commands.spawn((
+        Sprite::from_color(cross_color, Vec2::new(cross_thickness, cross_arm * 2.0)),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        layer.clone(),
     ));
 
+    // Placeholder label, scaled into world units. Removed when Features land.
     commands.spawn((
-        Text2d::new("Result"),
-        label_font,
-        label_color,
-        Transform::from_xyz(RESULT_AREA_OFFSET_X, 0.0, 0.0),
+        Text2d::new(label),
+        TextFont {
+            font_size: 48.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.7, 0.7, 0.8)),
+        Transform::from_xyz(0.0, 0.7, 0.0).with_scale(Vec3::splat(0.004)),
+        layer,
     ));
 }
 
@@ -106,7 +151,7 @@ fn params_panel(
         .show(ctx, |ui| {
             ui.heading("Parameters");
             ui.separator();
-            ui.label("(F2 skeleton — controls land here in F4 / Features)");
+            ui.label("(F3 — normalized [-1, 1] canvas)");
         })
         .response
         .rect
