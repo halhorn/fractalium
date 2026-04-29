@@ -1,51 +1,56 @@
-// Replica fields are used in Feat2+ but some may trigger dead_code for future Feat3.
-#![allow(dead_code)]
-
 use bevy::prelude::*;
 
-/// Single source of truth for the fractal: the base shape that gets recursively
-/// replicated, the placement rules for those replicas, and how many recursive
-/// levels to render. All positions are in normalized canvas coordinates
-/// ([-1, 1] x [-1, 1]).
-#[derive(Resource, Default, Clone)]
+/// フラクタル全体の状態を表す Bevy リソース。
+/// 「基図形 → 複製ルール → 再帰深さ」の 3 要素でフラクタルが一意に決まる。
+/// 座標は正規化キャンバス座標 [-1, 1] x [-1, 1] を用いる。
+#[derive(Resource, Clone)]
 pub struct FractalState {
+    /// 再帰の元となる基図形（線分の集合）
     pub base_shape: BaseShape,
+    /// 再帰時に基図形を配置する複製変換のリスト
     pub replicas: Vec<Replica>,
+    /// 再帰の深さ（1 = 基図形のみ、2 以上で replicas が適用される）
     pub depth: u32,
 }
 
+impl Default for FractalState {
+    /// 初期状態：基図形・複製ともに空、深さは 4。
+    fn default() -> Self {
+        Self {
+            base_shape: BaseShape::default(),
+            replicas: vec![],
+            depth: 4,
+        }
+    }
+}
+
+/// 再帰の元になる基図形。現状は線分の集合のみで表現する。
 #[derive(Default, Clone)]
 pub struct BaseShape {
     pub lines: Vec<Line>,
 }
 
-impl BaseShape {
-    /// Axis-aligned bounding box of all line endpoints. Returns `None` when there
-    /// are no lines.
-    pub fn bbox(&self) -> Option<Rect> {
-        let mut pts = self.lines.iter().flat_map(|l| [l.a, l.b]);
-        let first = pts.next()?;
-        let (min, max) = pts.fold((first, first), |(mn, mx), p| (mn.min(p), mx.max(p)));
-        Some(Rect::from_corners(min, max))
-    }
-}
-
+/// 2 点で表される 2D 線分。
 #[derive(Clone, Copy)]
 pub struct Line {
     pub a: Vec2,
     pub b: Vec2,
 }
 
-/// Affine placement of one replica of the base shape: translation, rotation,
-/// uniform scale. Order of application is scale → rotate → translate.
+/// 1 つの複製を表す相似変換（平行移動・回転・一様スケール）。
+/// 適用順は scale → rotate → translate。
 #[derive(Clone, Copy)]
 pub struct Replica {
+    /// 平行移動量
     pub translation: Vec2,
-    pub rotation: f32, // radians
-    pub scale: f32,    // must be > 0
+    /// 回転角（ラジアン）
+    pub rotation: f32,
+    /// 一様スケール（> 0）
+    pub scale: f32,
 }
 
 impl Replica {
+    /// UI から複製が新規追加されたときの初期値。原点・無回転・半分スケール。
     pub fn default_new() -> Self {
         Self {
             translation: Vec2::ZERO,
@@ -54,6 +59,7 @@ impl Replica {
         }
     }
 
+    /// 何も変換しない恒等変換。再帰描画の起点として用いる。
     pub fn identity() -> Self {
         Self {
             translation: Vec2::ZERO,
@@ -62,21 +68,18 @@ impl Replica {
         }
     }
 
-    /// Apply scale → rotate → translate to a point in base-shape space.
+    /// 基図形空間の点 `p` に scale → rotate → translate を適用する。
     pub fn apply(&self, p: Vec2) -> Vec2 {
         let scaled = p * self.scale;
-        let angle = self.rotation;
-        let rotated = Vec2::new(
-            scaled.x * angle.cos() - scaled.y * angle.sin(),
-            scaled.x * angle.sin() + scaled.y * angle.cos(),
-        );
-        rotated + self.translation
+        let (sin, cos) = self.rotation.sin_cos();
+        Vec2::new(scaled.x * cos - scaled.y * sin, scaled.x * sin + scaled.y * cos)
+            + self.translation
     }
 
-    /// Compose transforms: returns `c` where `c.apply(p) == self.apply(other.apply(p))`.
+    /// 2 つの相似変換を合成する。
+    /// 戻り値 `c` は `c.apply(p) == self.apply(other.apply(p))` を満たす。
     pub fn compose(self, other: Replica) -> Replica {
-        let cos_s = self.rotation.cos();
-        let sin_s = self.rotation.sin();
+        let (sin_s, cos_s) = self.rotation.sin_cos();
         let rot_t = Vec2::new(
             other.translation.x * cos_s - other.translation.y * sin_s,
             other.translation.x * sin_s + other.translation.y * cos_s,
@@ -89,32 +92,26 @@ impl Replica {
     }
 }
 
-/// Undo history for discrete user actions (line confirm, clear, replica add/delete).
-/// Continuous DragValue edits are not captured.
+const UNDO_LIMIT: usize = 50;
+
+/// ユーザーの離散的な操作（線確定・クリア・複製追加/削除）を巻き戻すためのスタック。
+/// DragValue による連続編集は対象外。
 #[derive(Resource, Default)]
 pub struct UndoStack {
     history: Vec<FractalState>,
 }
 
 impl UndoStack {
+    /// 現在の状態を履歴に積む。上限に達したら最古の履歴を破棄する。
     pub fn push(&mut self, state: FractalState) {
-        if self.history.len() >= 50 {
+        if self.history.len() >= UNDO_LIMIT {
             self.history.remove(0);
         }
         self.history.push(state);
     }
 
+    /// 最後に積んだ状態を取り出す。履歴が空なら `None`。
     pub fn pop(&mut self) -> Option<FractalState> {
         self.history.pop()
-    }
-}
-
-impl FractalState {
-    pub fn default_mvp() -> Self {
-        Self {
-            base_shape: BaseShape::default(),
-            replicas: vec![],
-            depth: 4,
-        }
     }
 }
