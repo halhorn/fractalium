@@ -1,3 +1,5 @@
+mod state;
+
 use bevy::camera::{
     OrthographicProjection, Projection, ScalingMode, Viewport, visibility::RenderLayers,
 };
@@ -6,6 +8,7 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{
     EguiContexts, EguiGlobalSettings, EguiPlugin, EguiPrimaryContextPass, PrimaryEguiContext, egui,
 };
+use state::FractalState;
 
 #[derive(Component)]
 struct EditCamera;
@@ -32,6 +35,7 @@ fn main() {
         }))
         .add_plugins(EguiPlugin::default())
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
+        .insert_resource(FractalState::default_mvp())
         .add_systems(Startup, setup)
         .add_systems(EguiPrimaryContextPass, params_panel)
         .run();
@@ -140,6 +144,7 @@ fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers, label: &str)
 fn params_panel(
     mut contexts: EguiContexts,
     windows: Query<&Window, With<PrimaryWindow>>,
+    mut state: ResMut<FractalState>,
     mut edit_cam: Query<&mut Camera, (With<EditCamera>, Without<ResultCamera>)>,
     mut result_cam: Query<&mut Camera, (With<ResultCamera>, Without<EditCamera>)>,
 ) -> Result {
@@ -151,7 +156,10 @@ fn params_panel(
         .show(ctx, |ui| {
             ui.heading("Parameters");
             ui.separator();
-            ui.label("(F3 — normalized [-1, 1] canvas)");
+            ui.add(egui::Slider::new(&mut state.depth, 1..=7).text("Depth"));
+            ui.separator();
+            ui.label(format!("Lines: {}", state.base_shape.lines.len()));
+            ui.label(format!("Replicas: {}", state.replicas.len()));
         })
         .response
         .rect
