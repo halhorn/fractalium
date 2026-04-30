@@ -92,6 +92,51 @@ impl Replica {
     }
 }
 
+/// 各パネルの論理ピクセルサイズを保持するリソース（egui オーバーレイの位置合わせに使用）。
+#[derive(Resource, Default)]
+pub struct CanvasLayout {
+    /// Edit / Placement パネルの幅（論理ピクセル）。
+    pub left_w_logical: f32,
+    /// Edit パネルの高さ（＝ Placement パネルの上端、論理ピクセル）。
+    pub top_h_logical: f32,
+}
+
+/// Placement パネルでの選択・ドラッグ状態を保持するリソース。
+#[derive(Resource, Default)]
+pub struct PlacementState {
+    /// 選択中のレプリカインデックス。
+    pub selected: Option<usize>,
+    /// 現在進行中のドラッグ操作。
+    pub drag: PlacementDrag,
+    /// Ctrl+C でコピーしたレプリカ。
+    pub clipboard: Option<Replica>,
+    /// ダブルクリック検出用の前回クリック時刻（秒）。
+    pub last_click_time: f64,
+    /// ダブルクリック検出用の前回クリック位置（ワールド座標）。
+    pub last_click_pos: Vec2,
+}
+
+/// Placement パネルのドラッグ操作の種別と開始時のスナップショット。
+#[derive(Default)]
+pub enum PlacementDrag {
+    #[default]
+    Idle,
+    Move {
+        start_cursor: Vec2,
+        start_translation: Vec2,
+    },
+    Scale {
+        pivot: Vec2,
+        start_cursor_dist: f32,
+        start_scale: f32,
+    },
+    Rotate {
+        pivot: Vec2,
+        start_angle: f32,
+        start_rotation: f32,
+    },
+}
+
 const UNDO_LIMIT: usize = 50;
 
 /// ユーザーの離散的な操作（線確定・クリア・複製追加/削除）を巻き戻すためのスタック。

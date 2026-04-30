@@ -32,10 +32,10 @@ fn hue_to_linear_rgba(hue: f32) -> [f32; 4] {
     LinearRgba::from(Hsla::new(hue % 360.0, 0.88, 0.58, 1.0)).to_f32_array()
 }
 
-/// Edit パネルで使う、複製インデックス由来の色。
-/// 黄金比に近い角度（137.508°）で色相をずらすことで、隣り合う複製の色を区別しやすくしている。
-pub fn replica_color(i: usize) -> LinearRgba {
-    LinearRgba::from(Hsla::new((i as f32 * 137.508) % 360.0, 0.85, 0.60, 1.0))
+/// Result パネルの depth=1 親と同じ色（全レプリカを均等に色相分割）。
+pub fn result_replica_color(i: usize, total: usize) -> LinearRgba {
+    let hue = if total == 0 { 0.0 } else { i as f32 * 360.0 / total as f32 };
+    LinearRgba::from(Hsla::new(hue, 0.88, 0.58, 1.0))
 }
 
 /// Startup 時に空の LineList Mesh と ColorMaterial を持つ Entity を生成する。
@@ -88,11 +88,9 @@ fn update_fractal_mesh(
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 }
 
-/// フラクタルを再帰的に展開し、リーフ線分の頂点座標と色を `positions` / `colors` に積む。
+/// フラクタルを再帰的に展開して頂点座標と色を `positions` / `colors` に積む。
 ///
-/// - `depth`: 残りの再帰回数。1 になったらリーフとして基図形を吐き出す。
-/// - `transform`: ここまでに合成された変換。
-/// - `hue` / `hue_step`: この部分木に割り当てられた色相のベース値と幅。
+/// - `depth`: 残りの再帰回数。
 fn collect_fractal_segments(
     depth: u32,
     transform: Replica,
@@ -103,7 +101,7 @@ fn collect_fractal_segments(
     hue: f32,
     hue_step: f32,
 ) {
-    if depth <= 1 {
+    if depth <= 1 || replicas.is_empty() {
         let color = hue_to_linear_rgba(hue);
         for line in lines {
             let a = transform.apply(line.a);
@@ -115,9 +113,7 @@ fn collect_fractal_segments(
         }
         return;
     }
-    if replicas.is_empty() {
-        return;
-    }
+
     let n = replicas.len() as f32;
     let child_step = hue_step / n;
     for (i, replica) in replicas.iter().enumerate() {

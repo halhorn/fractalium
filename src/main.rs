@@ -1,6 +1,7 @@
 mod edit;
 mod fractal;
 mod grid;
+mod placement;
 mod state;
 mod ui;
 mod view;
@@ -11,13 +12,18 @@ use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
 use edit::EditPlugin;
 use fractal::FractalPlugin;
-use state::FractalState;
+use placement::PlacementPlugin;
+use state::{CanvasLayout, FractalState};
 use ui::UiPlugin;
 use view::ViewPlugin;
 
 /// Edit キャンバスを描画するカメラのマーカーコンポーネント。
 #[derive(Component)]
 pub struct EditCamera;
+
+/// Placement キャンバスを描画するカメラのマーカーコンポーネント。
+#[derive(Component)]
+pub struct PlacementCamera;
 
 /// Result キャンバスを描画するカメラのマーカーコンポーネント。
 #[derive(Component)]
@@ -26,6 +32,11 @@ pub struct ResultCamera;
 /// Edit キャンバス上のオブジェクトを描画するレンダーレイヤ。
 pub fn edit_layer() -> RenderLayers {
     RenderLayers::layer(1)
+}
+
+/// Placement キャンバス上のオブジェクトを描画するレンダーレイヤ。
+pub fn placement_layer() -> RenderLayers {
+    RenderLayers::layer(3)
 }
 
 /// Result キャンバス上のオブジェクトを描画するレンダーレイヤ。
@@ -44,9 +55,10 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
-        .add_plugins((EditPlugin, FractalPlugin, ViewPlugin, UiPlugin))
+        .add_plugins((EditPlugin, FractalPlugin, PlacementPlugin, ViewPlugin, UiPlugin))
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
         .insert_resource(FractalState::default())
+        .insert_resource(CanvasLayout::default())
         .add_systems(Startup, setup)
         .run();
 }
@@ -69,10 +81,10 @@ fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
     spawn_world_cameras(&mut commands);
     spawn_egui_camera(&mut commands);
     spawn_canvas_decor(&mut commands, edit_layer());
-    spawn_canvas_decor(&mut commands, result_layer());
+    spawn_canvas_decor(&mut commands, placement_layer());
 }
 
-/// Edit / Result それぞれのキャンバスを描画する 2D カメラを生成する。
+/// Edit / Placement / Result それぞれのキャンバスを描画する 2D カメラを生成する。
 fn spawn_world_cameras(commands: &mut Commands) {
     commands.spawn((
         EditCamera,
@@ -85,10 +97,20 @@ fn spawn_world_cameras(commands: &mut Commands) {
         edit_layer(),
     ));
     commands.spawn((
-        ResultCamera,
+        PlacementCamera,
         Camera2d,
         Camera {
             order: 1,
+            ..default()
+        },
+        normalized_projection(),
+        placement_layer(),
+    ));
+    commands.spawn((
+        ResultCamera,
+        Camera2d,
+        Camera {
+            order: 2,
             ..default()
         },
         normalized_projection(),

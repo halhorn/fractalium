@@ -11,7 +11,6 @@ use bevy_egui::EguiContexts;
 
 use crate::EditCamera;
 use crate::edit_layer;
-use crate::fractal::replica_color;
 use crate::grid::{draw_grid, snap_to_grid};
 use crate::state::{FractalState, Line, UndoStack};
 
@@ -21,7 +20,6 @@ const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);
 const PREVIEW_COLOR: Color = Color::srgb(1.0, 0.8, 0.4);
 const SNAP_PREVIEW_COLOR: Color = Color::srgb(0.4, 1.0, 0.6);
 const GRID_PREVIEW_COLOR: Color = Color::srgb(0.4, 0.8, 1.0);
-const REPLICA_PREVIEW_ALPHA: f32 = 0.6;
 
 /// Edit キャンバス専用のギズモグループ（Edit カメラのレンダーレイヤにのみ描画される）。
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -54,7 +52,7 @@ impl Plugin for EditPlugin {
             .insert_gizmo_config(EditGizmos, config)
             .add_systems(
                 Update,
-                (handle_undo, handle_drag_input, draw_canvas, draw_replicas).chain(),
+                (handle_undo, handle_drag_input, draw_canvas).chain(),
             );
     }
 }
@@ -98,10 +96,22 @@ fn snap_to_45(start: Vec2, end: Vec2) -> Vec2 {
     start + Vec2::new(snapped.cos(), snapped.sin()) * delta.length()
 }
 
-/// マウスカーソルの画面座標を Edit カメラのワールド座標へ変換する。
-/// Edit ビューポート外（カーソルがウィンドウ外など）なら `None`。
+/// マウスカーソルの論理座標を Edit カメラのワールド座標へ変換する。
+/// Edit ビューポート外なら `None`。
 fn cursor_in_edit(window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
     let cursor = window.cursor_position()?;
+    if let Some(ref vp) = cam.viewport {
+        let scale = window.scale_factor();
+        let vp_min = vp.physical_position.as_vec2() / scale;
+        let vp_size = vp.physical_size.as_vec2() / scale;
+        if cursor.x < vp_min.x
+            || cursor.y < vp_min.y
+            || cursor.x > vp_min.x + vp_size.x
+            || cursor.y > vp_min.y + vp_size.y
+        {
+            return None;
+        }
+    }
     cam.viewport_to_world_2d(cam_tf, cursor).ok()
 }
 
@@ -214,19 +224,3 @@ fn draw_confirmed_lines(state: &FractalState, gizmos: &mut Gizmos<EditGizmos>) {
     }
 }
 
-/// 各 replica（複製ルール）に基図形を 1 段だけ適用したプレビューを Edit キャンバスに重ねる。
-/// 複製ごとに色を変えてパネル UI と対応付ける。
-fn draw_replicas(state: Res<FractalState>, mut gizmos: Gizmos<EditGizmos>) {
-    for (i, replica) in state.replicas.iter().enumerate() {
-        let lin = replica_color(i);
-        let color = Color::from(LinearRgba::new(
-            lin.red,
-            lin.green,
-            lin.blue,
-            REPLICA_PREVIEW_ALPHA,
-        ));
-        for line in &state.base_shape.lines {
-            gizmos.line_2d(replica.apply(line.a), replica.apply(line.b), color);
-        }
-    }
-}
