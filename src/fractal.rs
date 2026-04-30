@@ -1,40 +1,35 @@
 //! フラクタル本体（Result キャンバス側）の再帰計算と描画を提供するモジュール。
 //!
 //! 描画手順は次の通り：
-//! 1. 恒等変換から始めて、深さ `depth - 1` 回まで複製変換を再帰的に合成
-//! 2. リーフで基図形の各線分にその合成変換を適用
-//! 3. 各リーフに割り当てられた色相で線を描画
+//! 1. FractalState が変化したフレームのみ再帰計算を実行
+//! 2. 線分集合を LineList Mesh の頂点バッファに書き込む
+//! 3. MeshMaterial2d<ColorMaterial> で 1 ドローコールにまとめて描画
 
+use bevy::asset::RenderAssetUsages;
 use bevy::color::Hsla;
 use bevy::prelude::*;
+use bevy::render::render_resource::PrimitiveTopology;
 
 use crate::result_layer;
 use crate::state::{FractalState, Line, Replica};
-
-/// Result キャンバス専用のギズモグループ。
-#[derive(Default, Reflect, GizmoConfigGroup)]
-pub struct ResultGizmos;
 
 /// Result キャンバスへフラクタルを描画する一連のシステムを登録するプラグイン。
 pub struct FractalPlugin;
 
 impl Plugin for FractalPlugin {
     fn build(&self, app: &mut App) {
-        let mut config = bevy::gizmos::config::GizmoConfig {
-            render_layers: result_layer(),
-            ..Default::default()
-        };
-        config.line.width = 2.0;
-
-        app.insert_gizmo_config(ResultGizmos, config)
-            .add_systems(Update, draw_fractal_result);
+        app.add_systems(Startup, setup_fractal_mesh)
+            .add_systems(Update, update_fractal_mesh);
     }
 }
 
-/// HSL 色相からリニア RGB 色を生成する。彩度・輝度は固定。
-fn hue_to_color(hue: f32) -> Color {
-    let lin = LinearRgba::from(Hsla::new(hue % 360.0, 0.88, 0.58, 1.0));
-    Color::from(lin)
+/// フラクタル描画用 Mesh Entity を識別するマーカー。
+#[derive(Component)]
+struct FractalMesh;
+
+/// HSL 色相からリニア RGBA 配列を生成する。彩度・輝度は固定。
+fn hue_to_linear_rgba(hue: f32) -> [f32; 4] {
+    LinearRgba::from(Hsla::new(hue % 360.0, 0.88, 0.58, 1.0)).to_f32_array()
 }
 
 /// Edit パネルで使う、複製インデックス由来の色。
@@ -43,43 +38,84 @@ pub fn replica_color(i: usize) -> LinearRgba {
     LinearRgba::from(Hsla::new((i as f32 * 137.508) % 360.0, 0.85, 0.60, 1.0))
 }
 
-/// Result キャンバスにフラクタルの全リーフ線分を描画する。
-fn draw_fractal_result(state: Res<FractalState>, mut gizmos: Gizmos<ResultGizmos>) {
-    let mut segments: Vec<(Vec2, Vec2, f32)> = Vec::new();
-    // 最上位の複製で 360° の色相を分け合うように、初期 hue=0、hue_step=360 で開始する。
+/// Startup 時に空の LineList Mesh と ColorMaterial を持つ Entity を生成する。
+fn setup_fractal_mesh(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD);
+    commands.spawn((
+        FractalMesh,
+        Mesh2d(meshes.add(mesh)),
+        MeshMaterial2d(materials.add(ColorMaterial::default())),
+        result_layer(),
+    ));
+}
+
+/// FractalState が変化したフレームのみ Mesh の頂点バッファを更新する。
+fn update_fractal_mesh(
+    state: Res<FractalState>,
+    mesh_q: Query<&Mesh2d, With<FractalMesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    if !state.is_changed() {
+        return;
+    }
+
+    let Ok(mesh2d) = mesh_q.single() else {
+        return;
+    };
+    let Some(mesh) = meshes.get_mut(&mesh2d.0) else {
+        return;
+    };
+
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut colors: Vec<[f32; 4]> = Vec::new();
+
     collect_fractal_segments(
         state.depth,
         Replica::identity(),
         &state.base_shape.lines,
         &state.replicas,
-        &mut segments,
+        &mut positions,
+        &mut colors,
         0.0,
         360.0,
     );
-    for &(a, b, hue) in &segments {
-        gizmos.line_2d(a, b, hue_to_color(hue));
-    }
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 }
 
-/// フラクタルを再帰的に展開し、リーフ線分（変換後の座標）と色相を `out` に積む。
+/// フラクタルを再帰的に展開し、リーフ線分の頂点座標と色を `positions` / `colors` に積む。
 ///
 /// - `depth`: 残りの再帰回数。1 になったらリーフとして基図形を吐き出す。
 /// - `transform`: ここまでに合成された変換。
 /// - `hue` / `hue_step`: この部分木に割り当てられた色相のベース値と幅。
-///   各レベルで子 replica が等分し、最上位の replica が 360° を分け合う。
 fn collect_fractal_segments(
     depth: u32,
     transform: Replica,
     lines: &[Line],
     replicas: &[Replica],
-    out: &mut Vec<(Vec2, Vec2, f32)>,
+    positions: &mut Vec<[f32; 3]>,
+    colors: &mut Vec<[f32; 4]>,
     hue: f32,
     hue_step: f32,
 ) {
     if depth <= 1 {
+        let color = hue_to_linear_rgba(hue);
         for line in lines {
-            out.push((transform.apply(line.a), transform.apply(line.b), hue));
+            let a = transform.apply(line.a);
+            let b = transform.apply(line.b);
+            positions.push([a.x, a.y, 0.0]);
+            positions.push([b.x, b.y, 0.0]);
+            colors.push(color);
+            colors.push(color);
         }
+        return;
+    }
+    if replicas.is_empty() {
         return;
     }
     let n = replicas.len() as f32;
@@ -90,7 +126,8 @@ fn collect_fractal_segments(
             transform.compose(*replica),
             lines,
             replicas,
-            out,
+            positions,
+            colors,
             hue + i as f32 * child_step,
             child_step,
         );
