@@ -168,6 +168,7 @@ fn draw_params_controls(ui: &mut egui::Ui, state: &mut FractalState, undo_stack:
     ui.heading("Parameters");
     ui.separator();
     ui.add(egui::Slider::new(&mut state.depth, 1..=12).text("Depth"));
+    ui.checkbox(&mut state.show_all_generations, "Show all generations");
     ui.separator();
 
     ui.label(format!("Lines: {}", state.base_shape.lines.len()));

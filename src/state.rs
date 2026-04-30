@@ -11,6 +11,8 @@ pub struct FractalState {
     pub replicas: Vec<Replica>,
     /// 再帰の深さ（1 = 基図形のみ、2 以上で replicas が適用される）
     pub depth: u32,
+    /// true のとき、末端世代だけでなく途中世代の図形も描画する
+    pub show_all_generations: bool,
 }
 
 impl Default for FractalState {
@@ -20,6 +22,7 @@ impl Default for FractalState {
             base_shape: BaseShape::default(),
             replicas: vec![],
             depth: 4,
+            show_all_generations: false,
         }
     }
 }

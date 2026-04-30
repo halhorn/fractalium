@@ -82,6 +82,7 @@ fn update_fractal_mesh(
         &mut colors,
         0.0,
         360.0,
+        state.show_all_generations,
     );
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -91,6 +92,7 @@ fn update_fractal_mesh(
 /// フラクタルを再帰的に展開して頂点座標と色を `positions` / `colors` に積む。
 ///
 /// - `depth`: 残りの再帰回数。
+/// - `show_all_generations`: true のとき末端だけでなく途中世代も描画する。
 fn collect_fractal_segments(
     depth: u32,
     transform: Replica,
@@ -100,8 +102,12 @@ fn collect_fractal_segments(
     colors: &mut Vec<[f32; 4]>,
     hue: f32,
     hue_step: f32,
+    show_all_generations: bool,
 ) {
-    if depth <= 1 || replicas.is_empty() {
+    let is_leaf = depth <= 1 || replicas.is_empty();
+
+    // 末端、または途中世代も描画する設定のとき、この変換を描画する
+    if is_leaf || show_all_generations {
         let color = hue_to_linear_rgba(hue);
         for line in lines {
             let a = transform.apply(line.a);
@@ -111,6 +117,9 @@ fn collect_fractal_segments(
             colors.push(color);
             colors.push(color);
         }
+    }
+
+    if is_leaf {
         return;
     }
 
@@ -126,6 +135,7 @@ fn collect_fractal_segments(
             colors,
             hue + i as f32 * child_step,
             child_step,
+            show_all_generations,
         );
     }
 }
