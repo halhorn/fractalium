@@ -1,5 +1,5 @@
-//! 右側のパラメータパネル（egui）と、それに合わせたカメラのビューポート分配、
-//! 各パネルへのオーバーレイ UI を提供するモジュール。
+//! 右側のパラメータパネル（egui）と左側ペイン（Base Shape / Placement）の描画、
+//! および各カメラへのビューポート分配を提供するモジュール。
 
 use bevy::camera::Viewport;
 use bevy::prelude::*;
@@ -7,7 +7,7 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::fractal::result_replica_color;
-use crate::state::{CanvasLayout, FractalState, PlacementState, Replica, UndoStack};
+use crate::state::{CanvasLayout, FractalState, PlacementState, Replica, UiLayout, UndoStack};
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
 pub struct UiPlugin;
@@ -18,7 +18,6 @@ impl Plugin for UiPlugin {
     }
 }
 
-/// 右ドックにパラメータパネルを描画し、ビューポートを割り当て、各パネルのオーバーレイ UI を描画する。
 fn params_panel(
     mut contexts: EguiContexts,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -26,6 +25,7 @@ fn params_panel(
     mut undo_stack: ResMut<UndoStack>,
     mut placement: ResMut<PlacementState>,
     mut layout: ResMut<CanvasLayout>,
+    mut ui_layout: ResMut<UiLayout>,
     mut edit_cam: Query<
         &mut Camera,
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -40,131 +40,159 @@ fn params_panel(
     >,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-
-    let panel_logical_w = egui::SidePanel::right("params")
-        .default_width(300.0)
-        .resizable(true)
-        .show(ctx, |ui| {
-            draw_params_controls(ui, &mut state, &mut undo_stack, &mut placement);
-        })
-        .response
-        .rect
-        .width();
-
-    // ビューポート計算とレイアウト情報の更新
     let Ok(window) = windows.single() else {
         return Ok(());
     };
     let scale = window.scale_factor();
-    let panel_phys = (panel_logical_w * scale).round() as u32;
-    let win_w = window.physical_width();
-    let win_h = window.physical_height();
+    let win_h_log = window.height();
 
-    if win_w > panel_phys && win_h > 0 {
-        let canvas_w = win_w - panel_phys;
-        // 左パネル（Edit / Placement）は 1/4 幅に絞り、Result を最大化する
-        let left_w = (canvas_w / 4).max(120);
-        let right_w = (canvas_w - left_w).max(1);
-        let top_h = win_h / 2;
-        let bot_h = (win_h - top_h).max(1);
+    // ── Right: Params panel (collapsible) ──
+    let collapsed = ui_layout.params_collapsed;
+    let params_w = if collapsed { 28.0_f32 } else { 240.0_f32 };
+    let right_resp = egui::SidePanel::right("params")
+        .exact_width(params_w)
+        .show(ctx, |ui| {
+            if collapsed {
+                if ui.button("▶").clicked() {
+                    ui_layout.params_collapsed = false;
+                }
+            } else {
+                if ui.button("◀").clicked() {
+                    ui_layout.params_collapsed = true;
+                }
+                ui.separator();
+                draw_params_controls(ui, &mut state, &mut undo_stack, &mut placement);
+            }
+        });
+    let central_right_x = right_resp.response.rect.min.x;
 
-        let left_w_log = left_w as f32 / scale;
-        let top_h_log = top_h as f32 / scale;
-        layout.left_w_logical = left_w_log;
-        layout.top_h_logical = top_h_log;
+    // ── Left: Base Shape + Placement panel ──
+    // side: 正方形の一辺。ウィンドウ高さの 1/3 程度を目安とする。
+    let side = (win_h_log / 3.0).max(80.0);
+    let left_panel_w = side + 2.0 * 8.0 + 6.0; // inner_margin * 2 + frame stroke + panel margin
 
-        // カメラへのビューポート書き込み
-        let edit_vp = Viewport {
-            physical_position: UVec2::new(0, 0),
-            physical_size: UVec2::new(left_w, top_h.max(1)),
-            ..default()
-        };
-        let placement_vp = Viewport {
-            physical_position: UVec2::new(0, top_h),
-            physical_size: UVec2::new(left_w, bot_h),
-            ..default()
-        };
-        let result_vp = Viewport {
-            physical_position: UVec2::new(left_w, 0),
-            physical_size: UVec2::new(right_w, win_h),
-            ..default()
-        };
-        if let Ok(mut cam) = edit_cam.single_mut() {
-            cam.viewport = Some(edit_vp);
-        }
-        if let Ok(mut cam) = placement_cam.single_mut() {
-            cam.viewport = Some(placement_vp);
-        }
-        if let Ok(mut cam) = result_cam.single_mut() {
-            cam.viewport = Some(result_vp);
-        }
+    // SidePanel のデフォルト背景を透明にして Bevy カメラ描画を透過させる
+    let left_resp = egui::SidePanel::left("left_pane")
+        .frame(egui::Frame::default())
+        .exact_width(left_panel_w)
+        .show(ctx, |ui| {
+            let edit_rect = show_canvas_block(
+                ui,
+                "Base Shape",
+                |ui| {
+                    if ui.button("Clear lines").clicked() {
+                        undo_stack.push(state.clone());
+                        state.base_shape.lines.clear();
+                    }
+                },
+            );
 
-        draw_panel_overlays(ctx, left_w_log, top_h_log, &mut state, &mut undo_stack, &mut placement);
+            ui.add_space(4.0);
+
+            let placement_rect = show_canvas_block(
+                ui,
+                "Placement",
+                |ui| {
+                    if ui.button("+ Add replica").clicked() {
+                        undo_stack.push(state.clone());
+                        placement.selected = Some(state.replicas.len());
+                        state.replicas.push(Replica::default_new());
+                    }
+                },
+            );
+
+            (edit_rect, placement_rect)
+        });
+
+    let central_left_x = left_resp.response.rect.max.x;
+    let (edit_egui_rect, placement_egui_rect) = left_resp.inner;
+
+    // ── Result viewport: 左パネル右端〜右パネル左端、全高 ──
+    let central_rect = egui::Rect::from_min_max(
+        egui::pos2(central_left_x, 0.0),
+        egui::pos2(central_right_x, win_h_log),
+    );
+
+    let win_phys = UVec2::new(window.physical_width(), window.physical_height());
+    if let Ok(mut cam) = edit_cam.single_mut() {
+        cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
     }
+    if let Ok(mut cam) = placement_cam.single_mut() {
+        cam.viewport = egui_rect_to_viewport(placement_egui_rect, scale, win_phys);
+    }
+    if let Ok(mut cam) = result_cam.single_mut() {
+        cam.viewport = egui_rect_to_viewport(central_rect, scale, win_phys);
+    }
+
+    // placement_overlay_ui の境界チェック用に更新
+    layout.left_w_logical = placement_egui_rect.max.x;
+    layout.top_h_logical = placement_egui_rect.min.y;
 
     Ok(())
 }
 
-/// 各パネルのタイトルラベルと Edit パネルの操作ボタンを描画する。
-fn draw_panel_overlays(
-    ctx: &egui::Context,
-    left_w: f32,
-    top_h: f32,
-    state: &mut FractalState,
-    undo_stack: &mut UndoStack,
-    placement: &mut PlacementState,
-) {
-    let title_color = egui::Color32::from_rgba_unmultiplied(190, 190, 210, 200);
+/// タイトルヘッダ＋キャンバス本体を持つブロックを描画し、本体の egui::Rect を返す。
+fn show_canvas_block(
+    ui: &mut egui::Ui,
+    title: &str,
+    header_buttons: impl FnOnce(&mut egui::Ui),
+) -> egui::Rect {
+    canvas_block_frame()
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(title).heading());
+                header_buttons(ui);
+            });
+            ui.separator();
+            let s = ui.available_width();
+            // fill を塗らず Bevy カメラの出力をそのまま透過させる
+            let (rect, _resp) = ui.allocate_exact_size(egui::Vec2::splat(s), egui::Sense::hover());
+            rect
+        })
+        .inner
+}
 
-    // ── Base Shape パネル（左上）タイトル ──
-    egui::Area::new("title_edit".into())
-        .fixed_pos(egui::pos2(6.0, 4.0))
-        .interactable(false)
-        .show(ctx, |ui| {
-            ui.label(egui::RichText::new("Base Shape").color(title_color).small());
-        });
+fn canvas_block_frame() -> egui::Frame {
+    // fill を TRANSPARENT にして Bevy カメラ描画を透過させる
+    egui::Frame::default()
+        .inner_margin(egui::Margin::same(8))
+        .fill(egui::Color32::TRANSPARENT)
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 55, 72)))
+}
 
-    // ── Base Shape パネル：Clear Lines ボタン（左上パネルの下端） ──
-    egui::Area::new("edit_clear_lines".into())
-        .fixed_pos(egui::pos2(6.0, top_h - 30.0))
-        .show(ctx, |ui| {
-            if ui.button("Clear lines").clicked() {
-                undo_stack.push(state.clone());
-                state.base_shape.lines.clear();
-            }
-        });
-
-    // ── Placement パネル（左下）タイトル ──
-    egui::Area::new("title_placement".into())
-        .fixed_pos(egui::pos2(6.0, top_h + 4.0))
-        .interactable(false)
-        .show(ctx, |ui| {
-            ui.label(egui::RichText::new("Placement").color(title_color).small());
-        });
-
-    // ── Placement パネル：+ Add Replica ボタン ──
-    egui::Area::new("placement_add_replica".into())
-        .fixed_pos(egui::pos2(6.0, top_h + 22.0))
-        .show(ctx, |ui| {
-            if ui.button("+ Add replica").clicked() {
-                undo_stack.push(state.clone());
-                placement.selected = Some(state.replicas.len());
-                state.replicas.push(Replica::default_new());
-            }
-        });
-
-    // ── Result パネル（右）タイトル ──
-    egui::Area::new("title_result".into())
-        .fixed_pos(egui::pos2(left_w + 6.0, 4.0))
-        .interactable(false)
-        .show(ctx, |ui| {
-            ui.label(egui::RichText::new("Result").color(title_color).small());
-        });
+/// egui 論理ピクセル Rect → Bevy 物理ピクセル Viewport。
+/// ウィンドウ外や幅 0 の場合は None を返してクラッシュを防ぐ。
+fn egui_rect_to_viewport(rect: egui::Rect, scale: f32, win_phys: UVec2) -> Option<Viewport> {
+    let x = ((rect.min.x * scale).round() as i32).max(0) as u32;
+    let y = ((rect.min.y * scale).round() as i32).max(0) as u32;
+    // ウィンドウ境界を超えないようにサイズをクランプ
+    let w = ((rect.width() * scale).round() as i32)
+        .max(0) as u32;
+    let h = ((rect.height() * scale).round() as i32)
+        .max(0) as u32;
+    if x >= win_phys.x || y >= win_phys.y || w == 0 || h == 0 {
+        return None;
+    }
+    let w = w.min(win_phys.x - x);
+    let h = h.min(win_phys.y - y);
+    if w == 0 || h == 0 {
+        return None;
+    }
+    Some(Viewport {
+        physical_position: UVec2::new(x, y),
+        physical_size: UVec2::new(w, h),
+        ..default()
+    })
 }
 
 // === パラメータパネル内 UI ===
 
-fn draw_params_controls(ui: &mut egui::Ui, state: &mut FractalState, undo_stack: &mut UndoStack, placement: &mut PlacementState) {
+fn draw_params_controls(
+    ui: &mut egui::Ui,
+    state: &mut FractalState,
+    undo_stack: &mut UndoStack,
+    placement: &mut PlacementState,
+) {
     ui.heading("Parameters");
     ui.separator();
     ui.add(egui::Slider::new(&mut state.depth, 1..=12).text("Depth"));

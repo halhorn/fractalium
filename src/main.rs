@@ -13,7 +13,7 @@ use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 use edit::EditPlugin;
 use fractal::FractalPlugin;
 use placement::PlacementPlugin;
-use state::{CanvasLayout, FractalState};
+use state::{CanvasLayout, FractalState, UiLayout};
 use ui::UiPlugin;
 use view::ViewPlugin;
 
@@ -59,6 +59,7 @@ fn main() {
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
         .insert_resource(FractalState::default())
         .insert_resource(CanvasLayout::default())
+        .insert_resource(UiLayout::default())
         .add_systems(Startup, setup)
         .run();
 }
@@ -140,7 +141,7 @@ fn spawn_canvas_decor(commands: &mut Commands, layer: RenderLayers) {
 
 /// [-1, 1] x [-1, 1] の単位正方形を囲む細い枠を生成する。
 fn spawn_unit_frame(commands: &mut Commands, layer: &RenderLayers) {
-    let color = Color::srgb(0.45, 0.45, 0.55);
+    let color = Color::srgb(0.18, 0.18, 0.22);
     let thickness = 0.01;
     let sides = [
         (Vec2::new(2.0, thickness), Vec3::new(0.0, 1.0, 0.0)),  // 上辺

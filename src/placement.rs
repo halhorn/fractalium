@@ -203,7 +203,7 @@ fn handle_placement_input(
     }
 
     let egui_ctx = contexts.ctx_mut();
-    let egui_wants_pointer = egui_ctx.as_ref().map(|ctx| ctx.wants_pointer_input()).unwrap_or(false);
+    let egui_wants_pointer = egui_ctx.as_ref().map(|ctx| ctx.is_using_pointer()).unwrap_or(false);
     let egui_wants_keyboard = egui_ctx.map(|ctx| ctx.wants_keyboard_input()).unwrap_or(false);
 
     // Ctrl+C / Ctrl+V（egui がキーボードを必要としていないときのみ）

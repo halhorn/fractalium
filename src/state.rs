@@ -104,6 +104,12 @@ pub struct CanvasLayout {
     pub top_h_logical: f32,
 }
 
+/// UI レイアウト状態（パネルの折りたたみなど）を保持するリソース。
+#[derive(Resource, Default)]
+pub struct UiLayout {
+    pub params_collapsed: bool,
+}
+
 /// Placement パネルでの選択・ドラッグ状態を保持するリソース。
 #[derive(Resource, Default)]
 pub struct PlacementState {

@@ -157,7 +157,7 @@ fn handle_drag_input(
     // egui がポインタを掴んでいるときは（パネル上クリックなど）描画を始めない
     let egui_wants_pointer = contexts
         .ctx_mut()
-        .map(|ctx| ctx.wants_pointer_input())
+        .map(|ctx| ctx.is_using_pointer())
         .unwrap_or(false);
 
     if let Some(raw_start) = cursor
