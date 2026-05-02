@@ -11,6 +11,8 @@ const GRID_SQUARE_DIV: f32 = 8.0;
 const GRID_TRI_DIV: f32 = 6.0;
 const FINE_SQUARE_DIV: f32 = 16.0;
 const FINE_TRI_DIV: f32 = 12.0;
+/// グリッドの描画・スナップ範囲（[-GRID_RANGE, GRID_RANGE]）。
+const GRID_RANGE: f32 = 3.0;
 
 const GRID_DOT_RADIUS: f32 = 0.012;
 const GRID_HIGHLIGHT_RADIUS: f32 = 0.025;
@@ -41,15 +43,15 @@ fn nearest_square_point(pos: Vec2, div: f32) -> Vec2 {
 fn nearest_iso_point(pos: Vec2, div: f32) -> Vec2 {
     let h = 2.0 / div;
     let v = h * (3.0_f32.sqrt() / 2.0);
-    let m_center = ((pos.y + 1.0) / v).round() as i32;
+    let m_center = ((pos.y + GRID_RANGE) / v).round() as i32;
     let mut best = Vec2::ZERO;
     let mut best_dist = f32::MAX;
     for m in (m_center - 1)..=(m_center + 1) {
-        let row_y = -1.0 + m as f32 * v;
+        let row_y = -GRID_RANGE + m as f32 * v;
         let offset = if m.rem_euclid(2) == 0 { 0.0 } else { h / 2.0 };
-        let n_center = ((pos.x + 1.0 - offset) / h).round() as i32;
+        let n_center = ((pos.x + GRID_RANGE - offset) / h).round() as i32;
         for n in (n_center - 1)..=(n_center + 1) {
-            let candidate = Vec2::new(-1.0 + n as f32 * h + offset, row_y);
+            let candidate = Vec2::new(-GRID_RANGE + n as f32 * h + offset, row_y);
             let dist = candidate.distance_squared(pos);
             if dist < best_dist {
                 best_dist = dist;
@@ -84,10 +86,10 @@ fn draw_dot<G: GizmoConfigGroup>(gizmos: &mut Gizmos<G>, pt: Vec2, highlighted: 
 
 fn draw_square_grid<G: GizmoConfigGroup>(gizmos: &mut Gizmos<G>, div: f32, highlighted: Option<Vec2>) {
     let s = 2.0 / div;
-    let n = div as i32;
+    let n = (2.0 * GRID_RANGE / s).round() as i32;
     for xi in 0..=n {
         for yi in 0..=n {
-            draw_dot(gizmos, Vec2::new(-1.0 + xi as f32 * s, -1.0 + yi as f32 * s), highlighted);
+            draw_dot(gizmos, Vec2::new(-GRID_RANGE + xi as f32 * s, -GRID_RANGE + yi as f32 * s), highlighted);
         }
     }
 }
@@ -102,15 +104,15 @@ fn draw_iso_grid<G: GizmoConfigGroup>(
     let h = 2.0 / tri_div;
     let v = h * (3.0_f32.sqrt() / 2.0);
     let sq_s = 2.0 / sq_div;
-    let m_max = (2.0 / v).ceil() as i32;
+    let m_max = (2.0 * GRID_RANGE / v).ceil() as i32;
     for m in 0..=m_max {
-        let y = -1.0 + m as f32 * v;
-        if y > 1.01 { break; }
+        let y = -GRID_RANGE + m as f32 * v;
+        if y > GRID_RANGE + 0.01 { break; }
         let offset = if m.rem_euclid(2) == 0 { 0.0 } else { h / 2.0 };
-        let n_max = ((2.0 - offset) / h).ceil() as i32;
+        let n_max = ((2.0 * GRID_RANGE - offset) / h).ceil() as i32;
         for n in 0..=n_max {
-            let x = -1.0 + n as f32 * h + offset;
-            if x > 1.01 { continue; }
+            let x = -GRID_RANGE + n as f32 * h + offset;
+            if x > GRID_RANGE + 0.01 { continue; }
             let pt = Vec2::new(x, y);
             let on_sq = (pt.x / sq_s).fract().abs() < 1e-4 && (pt.y / sq_s).fract().abs() < 1e-4;
             if !on_sq {

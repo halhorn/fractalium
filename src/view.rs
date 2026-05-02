@@ -7,6 +7,14 @@ use bevy::window::PrimaryWindow;
 
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
+/// ズーム時にカーソル位置を中心にする（true）か原点固定にする（false）か。
+trait ZoomTowardsCursor {
+    const ZOOM_TOWARDS_CURSOR: bool;
+}
+impl ZoomTowardsCursor for EditCamera     { const ZOOM_TOWARDS_CURSOR: bool = false; }
+impl ZoomTowardsCursor for PlacementCamera { const ZOOM_TOWARDS_CURSOR: bool = false; }
+impl ZoomTowardsCursor for ResultCamera   { const ZOOM_TOWARDS_CURSOR: bool = true; }
+
 const ZOOM_SPEED: f32 = 0.02;
 const ZOOM_MIN: f32 = 0.005;
 const ZOOM_MAX: f32 = 8.0;
@@ -52,8 +60,8 @@ fn cursor_in_viewport(window: &Window, cam: &Camera) -> bool {
 }
 
 /// マウスホイールで任意キャンバスをズームするジェネリックシステム。
-/// カーソル位置を中心に拡縮する。
-fn zoom_canvas<C: Component>(
+/// C::ZOOM_TOWARDS_CURSOR が true のときはカーソル位置中心、false のときは原点 (0,0) 固定。
+fn zoom_canvas<C: Component + ZoomTowardsCursor>(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut cam_q: Query<(&Camera, &GlobalTransform, &mut Projection, &mut Transform), With<C>>,
@@ -73,15 +81,22 @@ fn zoom_canvas<C: Component>(
 
     let old_scale = ortho.scale;
     let new_scale = (old_scale * (1.0 - total * ZOOM_SPEED)).clamp(ZOOM_MIN, ZOOM_MAX);
+    let scale_ratio = new_scale / old_scale;
 
-    if let Some(cursor_screen) = window.cursor_position() {
-        if let Ok(cursor_world) = cam.viewport_to_world_2d(cam_tf, cursor_screen) {
-            let scale_ratio = new_scale / old_scale;
-            transform.translation.x +=
-                (cursor_world.x - transform.translation.x) * (1.0 - scale_ratio);
-            transform.translation.y +=
-                (cursor_world.y - transform.translation.y) * (1.0 - scale_ratio);
+    if C::ZOOM_TOWARDS_CURSOR {
+        // Result: カーソル下のワールド座標を固定してズーム
+        if let Some(cursor_screen) = window.cursor_position() {
+            if let Ok(cursor_world) = cam.viewport_to_world_2d(cam_tf, cursor_screen) {
+                transform.translation.x +=
+                    (cursor_world.x - transform.translation.x) * (1.0 - scale_ratio);
+                transform.translation.y +=
+                    (cursor_world.y - transform.translation.y) * (1.0 - scale_ratio);
+            }
         }
+    } else {
+        // Edit / Placement: 原点 (0,0) を中心にズーム
+        transform.translation.x *= scale_ratio;
+        transform.translation.y *= scale_ratio;
     }
 
     ortho.scale = new_scale;
