@@ -8,8 +8,8 @@ use bevy::window::PrimaryWindow;
 use crate::ResultCamera;
 
 /// ホイール 1 ノッチあたりのズーム係数（小さいほど細かい）。
-const ZOOM_SPEED: f32 = 0.05;
-const ZOOM_MIN: f32 = 0.05;
+const ZOOM_SPEED: f32 = 0.02;
+const ZOOM_MIN: f32 = 0.005;
 const ZOOM_MAX: f32 = 8.0;
 
 /// Result ビューポート内での左ドラッグ状態。
