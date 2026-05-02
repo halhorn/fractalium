@@ -489,10 +489,10 @@ fn draw_selection_box(
         draw_rect(&mut gizmos, corner - Vec2::splat(h), corner + Vec2::splat(h), SELECTION_COLOR);
     }
 
-    // 中心の + マーク
-    let center = replica_aabb(replica, &state.base_shape.lines).center();
-    gizmos.line_2d(center - Vec2::X * PIVOT_ARM, center + Vec2::X * PIVOT_ARM, PIVOT_COLOR);
-    gizmos.line_2d(center - Vec2::Y * PIVOT_ARM, center + Vec2::Y * PIVOT_ARM, PIVOT_COLOR);
+    // + マーク: レプリカの座標原点（translation）に表示
+    let pivot = replica.translation;
+    gizmos.line_2d(pivot - Vec2::X * PIVOT_ARM, pivot + Vec2::X * PIVOT_ARM, PIVOT_COLOR);
+    gizmos.line_2d(pivot - Vec2::Y * PIVOT_ARM, pivot + Vec2::Y * PIVOT_ARM, PIVOT_COLOR);
 }
 
 fn draw_rect(gizmos: &mut Gizmos<PlacementGizmos>, min: Vec2, max: Vec2, color: Color) {
