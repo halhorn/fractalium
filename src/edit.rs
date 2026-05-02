@@ -33,6 +33,9 @@ pub enum DrawState {
     Idle,
     Dragging {
         start: Vec2,
+        /// ドラッグ中の最後のカーソル位置。リリースフレームで cursor_in_edit が
+        /// None になった場合（ビューポート境界競合）のフォールバックとして使う。
+        last_cursor: Vec2,
     },
 }
 
@@ -170,18 +173,26 @@ fn handle_drag_input(
         } else {
             raw_start
         };
-        *draw_state = DrawState::Dragging { start };
+        *draw_state = DrawState::Dragging { start, last_cursor: start };
+    }
+
+    // ドラッグ中に last_cursor を更新（リリースフレームで viewport 境界外になっても確定できるよう）
+    if buttons.pressed(MouseButton::Left) {
+        if let DrawState::Dragging { ref mut last_cursor, .. } = *draw_state {
+            if let Some(pos) = cursor {
+                *last_cursor = pos;
+            }
+        }
     }
 
     if buttons.just_released(MouseButton::Left)
-        && let DrawState::Dragging { start } = *draw_state
+        && let DrawState::Dragging { start, last_cursor } = *draw_state
     {
-        if let Some(raw_end) = cursor {
-            let (end, _) = snap_endpoint(start, raw_end, &modifiers);
-            if (end - start).length() >= MIN_LINE_LEN {
-                undo_stack.push(state.clone());
-                state.base_shape.lines.push(Line { a: start, b: end });
-            }
+        let raw_end = cursor.unwrap_or(last_cursor);
+        let (end, _) = snap_endpoint(start, raw_end, &modifiers);
+        if (end - start).length() >= MIN_LINE_LEN {
+            undo_stack.push(state.clone());
+            state.base_shape.lines.push(Line { a: start, b: end });
         }
         *draw_state = DrawState::Idle;
     }
@@ -209,7 +220,7 @@ fn draw_canvas(
         draw_grid(&mut gizmos, cursor.map(snap_to_grid));
     }
 
-    if let DrawState::Dragging { start } = *draw_state
+    if let DrawState::Dragging { start, .. } = *draw_state
         && let Some(raw_end) = cursor
     {
         let (end, color) = snap_endpoint(start, raw_end, &modifiers);

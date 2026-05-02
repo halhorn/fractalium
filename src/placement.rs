@@ -225,6 +225,17 @@ fn handle_placement_input(
         }
     }
 
+    // ドラッグ継続・終了は egui_wants_pointer に関わらず処理する。
+    // 押下時にすでにキャンバスを掴んでいた（PlacementDrag が非 Idle）場合のみ動作するので安全。
+    if buttons.pressed(MouseButton::Left) {
+        if let Some(pos) = cursor {
+            apply_drag(pos, ctrl, &mut state, &mut placement);
+        }
+    }
+    if buttons.just_released(MouseButton::Left) && !matches!(placement.drag, PlacementDrag::Idle) {
+        placement.drag = PlacementDrag::Idle;
+    }
+
     if egui_wants_pointer {
         return;
     }
@@ -280,17 +291,6 @@ fn handle_placement_input(
         }
     }
 
-    // ドラッグ中の更新
-    if buttons.pressed(MouseButton::Left) {
-        if let Some(pos) = cursor {
-            apply_drag(pos, ctrl, &mut state, &mut placement);
-        }
-    }
-
-    // マウス離し → ドラッグ終了
-    if buttons.just_released(MouseButton::Left) {
-        placement.drag = PlacementDrag::Idle;
-    }
 }
 
 /// マウス押下時のドラッグ開始判定。

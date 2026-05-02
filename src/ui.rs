@@ -26,6 +26,7 @@ fn params_panel(
     mut placement: ResMut<PlacementState>,
     mut layout: ResMut<CanvasLayout>,
     mut ui_layout: ResMut<UiLayout>,
+    buttons: Res<ButtonInput<MouseButton>>,
     mut edit_cam: Query<
         &mut Camera,
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -61,7 +62,7 @@ fn params_panel(
                     ui_layout.params_collapsed = true;
                 }
                 ui.separator();
-                draw_params_controls(ui, &mut state, &mut undo_stack, &mut placement);
+                draw_params_controls(ui, &mut state, &mut undo_stack, &mut placement, &buttons);
             }
         });
     let central_right_x = right_resp.response.rect.min.x;
@@ -192,10 +193,21 @@ fn draw_params_controls(
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
+    buttons: &ButtonInput<MouseButton>,
 ) {
     ui.heading("Parameters");
     ui.separator();
-    ui.add(egui::Slider::new(&mut state.depth, 1..=12).text("Depth"));
+
+    // ローカルバッファ経由で Bevy の入力状態をゲートとして使う。
+    // egui が dragged 状態のまま残った場合（bevy_egui の入力同期ズレ）でも
+    // Bevy がボタン非押下と報告していれば値を更新しない。
+    let mut depth = state.depth;
+    let depth_resp = ui.add(egui::Slider::new(&mut depth, 1..=12).text("Depth"));
+    let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);
+    if depth_resp.changed() && !egui_stuck {
+        state.depth = depth;
+    }
+
     ui.checkbox(&mut state.show_all_generations, "Show all generations");
     ui.separator();
 

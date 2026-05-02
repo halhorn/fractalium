@@ -19,7 +19,9 @@ pub struct FractalPlugin;
 impl Plugin for FractalPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_fractal_mesh)
-            .add_systems(Update, update_fractal_mesh);
+            // PostUpdate で実行することで、同フレームの Update（drag 確定）・
+            // EguiPrimaryContextPass（DragValue 操作）の変更を即座に反映する。
+            .add_systems(PostUpdate, update_fractal_mesh);
     }
 }
 
