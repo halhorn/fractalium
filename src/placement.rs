@@ -38,6 +38,8 @@ const HANDLE_HALF: f32 = 0.022;
 const PIVOT_ARM: f32 = 0.06;
 /// ダブルクリック判定時間（秒）。
 const DOUBLE_CLICK_SEC: f64 = 0.35;
+/// RotatePending → Rotate に昇格する最小移動距離²（これ未満は単発クリックと判定）。
+const ROTATE_START_THRESHOLD_SQ: f32 = 0.015 * 0.015;
 /// コピペ時の位置オフセット。
 const PASTE_OFFSET: Vec2 = Vec2::new(0.07, -0.07);
 
@@ -228,11 +230,24 @@ fn handle_placement_input(
     // ドラッグ継続・終了は egui_wants_pointer に関わらず処理する。
     // 押下時にすでにキャンバスを掴んでいた（PlacementDrag が非 Idle）場合のみ動作するので安全。
     if buttons.pressed(MouseButton::Left) {
+        // RotatePending: 閾値を超えたら Rotate に昇格（ここで初めて undo を積む）
+        if let PlacementDrag::RotatePending { pivot, start_cursor, start_angle, start_rotation } = placement.drag {
+            if let Some(pos) = cursor {
+                if (pos - start_cursor).length_squared() > ROTATE_START_THRESHOLD_SQ {
+                    undo_stack.push(state.clone());
+                    placement.drag = PlacementDrag::Rotate { pivot, start_angle, start_rotation };
+                }
+            }
+        }
         if let Some(pos) = cursor {
             apply_drag(pos, ctrl, &mut state, &mut placement);
         }
     }
     if buttons.just_released(MouseButton::Left) && !matches!(placement.drag, PlacementDrag::Idle) {
+        // RotatePending のまま離した = 移動なしの単発クリック → 選択解除
+        if matches!(placement.drag, PlacementDrag::RotatePending { .. }) {
+            placement.selected = None;
+        }
         placement.drag = PlacementDrag::Idle;
     }
 
@@ -340,13 +355,13 @@ fn start_drag(
         undo_stack.push(state.clone());
         placement.drag = drag;
     } else if let Some(sel) = placement.selected {
-        // 全レプリカ外 → 選択中レプリカを回転
+        // 全レプリカ外 → 回転待機（単発クリックなら選択解除、ドラッグなら回転）
         if sel < state.replicas.len() {
             let pivot = display_aabb(&state.replicas[sel], &state.base_shape.lines).center();
             let d = cursor_pos - pivot;
-            undo_stack.push(state.clone());
-            placement.drag = PlacementDrag::Rotate {
+            placement.drag = PlacementDrag::RotatePending {
                 pivot,
+                start_cursor: cursor_pos,
                 start_angle: d.y.atan2(d.x),
                 start_rotation: state.replicas[sel].rotation,
             };
@@ -384,6 +399,7 @@ fn apply_drag(cursor_pos: Vec2, ctrl: bool, state: &mut FractalState, placement:
                 raw
             };
         }
+        PlacementDrag::RotatePending { .. } => {}
     }
 }
 

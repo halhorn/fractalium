@@ -144,6 +144,14 @@ pub enum PlacementDrag {
         start_angle: f32,
         start_rotation: f32,
     },
+    /// 空白クリック後の待機状態。一定距離動いたら Rotate に昇格。
+    /// 動かずに離したら選択解除。
+    RotatePending {
+        pivot: Vec2,
+        start_cursor: Vec2,
+        start_angle: f32,
+        start_rotation: f32,
+    },
 }
 
 const UNDO_LIMIT: usize = 50;
