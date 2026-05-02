@@ -1,13 +1,12 @@
-//! Result キャンバスのビュー操作（ズーム・パン）を提供するモジュール。
+//! 各キャンバスのビュー操作（ズーム・パン）を提供するモジュール。
 
 use bevy::camera::Projection;
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::ResultCamera;
+use crate::{EditCamera, PlacementCamera, ResultCamera};
 
-/// ホイール 1 ノッチあたりのズーム係数（小さいほど細かい）。
 const ZOOM_SPEED: f32 = 0.02;
 const ZOOM_MIN: f32 = 0.005;
 const ZOOM_MAX: f32 = 8.0;
@@ -24,12 +23,20 @@ pub struct ViewPlugin;
 impl Plugin for ViewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PanState>()
-            .add_systems(Update, (zoom_result, pan_result));
+            .add_systems(
+                Update,
+                (
+                    zoom_canvas::<EditCamera>,
+                    zoom_canvas::<PlacementCamera>,
+                    zoom_canvas::<ResultCamera>,
+                    pan_result,
+                ),
+            );
     }
 }
 
-/// カーソルが Result カメラのビューポート内にあるか返す。
-fn cursor_in_result_viewport(window: &Window, cam: &Camera) -> bool {
+/// カーソルが指定カメラのビューポート内にあるか返す。
+fn cursor_in_viewport(window: &Window, cam: &Camera) -> bool {
     let Some(cursor) = window.cursor_position() else { return false; };
     if let Some(ref vp) = cam.viewport {
         let scale = window.scale_factor();
@@ -44,23 +51,21 @@ fn cursor_in_result_viewport(window: &Window, cam: &Camera) -> bool {
     }
 }
 
-/// マウスホイールで Result カメラをズームする。カーソル位置を中心に拡縮する。
-fn zoom_result(
+/// マウスホイールで任意キャンバスをズームするジェネリックシステム。
+/// カーソル位置を中心に拡縮する。
+fn zoom_canvas<C: Component>(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut result_cam_q: Query<
-        (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        With<ResultCamera>,
-    >,
+    mut cam_q: Query<(&Camera, &GlobalTransform, &mut Projection, &mut Transform), With<C>>,
 ) {
     let total = scroll.delta.y;
     if total == 0.0 {
         return;
     }
     let Ok(window) = windows.single() else { return; };
-    let Ok((cam, cam_tf, mut proj, mut transform)) = result_cam_q.single_mut() else { return; };
+    let Ok((cam, cam_tf, mut proj, mut transform)) = cam_q.single_mut() else { return; };
 
-    if !cursor_in_result_viewport(window, cam) {
+    if !cursor_in_viewport(window, cam) {
         return;
     }
 
@@ -69,7 +74,6 @@ fn zoom_result(
     let old_scale = ortho.scale;
     let new_scale = (old_scale * (1.0 - total * ZOOM_SPEED)).clamp(ZOOM_MIN, ZOOM_MAX);
 
-    // カーソルのワールド座標を基準にズームし、カーソル下の点が変わらないよう補正する
     if let Some(cursor_screen) = window.cursor_position() {
         if let Ok(cursor_world) = cam.viewport_to_world_2d(cam_tf, cursor_screen) {
             let scale_ratio = new_scale / old_scale;
@@ -88,10 +92,7 @@ fn pan_result(
     mut pan_state: ResMut<PanState>,
     buttons: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut result_cam_q: Query<
-        (&Camera, &GlobalTransform, &mut Transform),
-        With<ResultCamera>,
-    >,
+    mut result_cam_q: Query<(&Camera, &GlobalTransform, &mut Transform), With<ResultCamera>>,
 ) {
     let Ok(window) = windows.single() else { return; };
     let Ok((cam, cam_tf, mut transform)) = result_cam_q.single_mut() else { return; };
@@ -105,13 +106,12 @@ fn pan_result(
         pan_state.active = false;
     }
 
-    if buttons.just_pressed(MouseButton::Left) && cursor_in_result_viewport(window, cam) {
+    if buttons.just_pressed(MouseButton::Left) && cursor_in_viewport(window, cam) {
         pan_state.active = true;
         pan_state.last_cursor_screen = cursor_screen;
     }
 
     if pan_state.active && buttons.pressed(MouseButton::Left) {
-        // フレーム間のカーソル移動量をワールド座標で求め、カメラを逆方向に動かす
         if let (Ok(prev_world), Ok(curr_world)) = (
             cam.viewport_to_world_2d(cam_tf, pan_state.last_cursor_screen),
             cam.viewport_to_world_2d(cam_tf, cursor_screen),
