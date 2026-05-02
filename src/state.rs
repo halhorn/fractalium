@@ -58,7 +58,7 @@ impl Replica {
         Self {
             translation: Vec2::ZERO,
             rotation: 0.0,
-            scale: 0.5,
+            scale: 1.0,
         }
     }
 
