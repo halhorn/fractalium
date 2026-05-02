@@ -16,7 +16,7 @@ const GRID_RANGE: f32 = 3.0;
 
 const GRID_DOT_RADIUS: f32 = 0.012;
 const GRID_HIGHLIGHT_RADIUS: f32 = 0.025;
-const GRID_DOT_COLOR: Color = Color::srgba(0.6, 0.7, 1.0, 0.35);
+const GRID_DOT_COLOR: Color = Color::srgba(0.6, 0.7, 1.0, 0.18);
 const GRID_HIGHLIGHT_COLOR: Color = Color::srgba(0.4, 1.0, 0.6, 0.9);
 
 // === スナップ計算 ===
