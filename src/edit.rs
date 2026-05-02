@@ -161,7 +161,12 @@ fn find_line_at(cursor: Vec2, lines: &[Line]) -> Option<usize> {
         .iter()
         .enumerate()
         .rev()
-        .find(|(_, l)| point_to_segment_dist(cursor, l.a, l.b) < LINE_HIT_DISTANCE)
+        .find(|(_, l)| {
+            // 端点付近はヒット判定から除外（端点から新規線を描くためのクリックを妨げない）
+            let near_endpoint = (cursor - l.a).length() < ENDPOINT_HIT_RADIUS
+                || (cursor - l.b).length() < ENDPOINT_HIT_RADIUS;
+            !near_endpoint && point_to_segment_dist(cursor, l.a, l.b) < LINE_HIT_DISTANCE
+        })
         .map(|(i, _)| i)
 }
 
