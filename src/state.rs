@@ -107,6 +107,11 @@ pub struct CanvasLayout {
     pub placement_max_y: f32,
 }
 
+/// ダブルタップドラッグによるズームが進行中かどうかを示すフラグ。
+/// edit / placement システムがタッチ入力を無視するために参照する。
+#[derive(Resource, Default)]
+pub struct DoubleTapZoomActive(pub bool);
+
 /// UI レイアウト状態（パネルの折りたたみなど）を保持するリソース。
 #[derive(Resource)]
 pub struct UiLayout {

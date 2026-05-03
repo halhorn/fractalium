@@ -14,7 +14,7 @@ use bevy_egui::EguiContexts;
 use crate::EditCamera;
 use crate::edit_layer;
 use crate::grid::{draw_grid, snap_to_grid};
-use crate::state::{FractalState, Line, UndoStack};
+use crate::state::{DoubleTapZoomActive, FractalState, Line, UndoStack};
 
 const MIN_LINE_LEN: f32 = 0.01;
 const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);
@@ -183,6 +183,7 @@ fn handle_drag_input(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     touches: Res<Touches>,
+    dtap_active: Res<DoubleTapZoomActive>,
     mut draw_touch_id: Local<Option<u64>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     edit_cam: Query<(&Camera, &GlobalTransform), With<EditCamera>>,
@@ -195,8 +196,20 @@ fn handle_drag_input(
     // === タッチ入力管理 ===
     let touch_count = touches.iter().count();
 
+    // ダブルタップズーム中はタッチ描画をキャンセル・スキップ
+    if dtap_active.0 {
+        if draw_touch_id.is_some() {
+            *draw_touch_id = None;
+            if !matches!(*draw_state, DrawState::Idle | DrawState::Selected(_)) {
+                *draw_state = DrawState::Idle;
+            }
+        }
+        // タッチ入力を無視してマウス処理のみ続ける（マウスは通常通り動作させる）
+        // ただし通常操作の残り部分もタッチなしで動かすため return はせず fall-through
+    }
+
     // 2本指以上: 描画中のタッチをキャンセル
-    if touch_count >= 2 {
+    if touch_count >= 2 || dtap_active.0 {
         if draw_touch_id.is_some() {
             *draw_touch_id = None;
             if !matches!(*draw_state, DrawState::Idle | DrawState::Selected(_)) {

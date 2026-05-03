@@ -18,7 +18,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::fractal::result_replica_color;
 use crate::grid::{draw_fine_grid, snap_to_fine_grid};
 use crate::placement_layer;
-use crate::state::{CanvasLayout, FractalState, Line, PlacementDrag, PlacementState, Replica, UndoStack};
+use crate::state::{CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState, Replica, UndoStack};
 use crate::PlacementCamera;
 
 // === 定数 ===
@@ -179,6 +179,7 @@ fn handle_placement_input(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     touches: Res<Touches>,
+    dtap_active: Res<DoubleTapZoomActive>,
     mut drag_touch_id: Local<Option<u64>>,
     time: Res<Time>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -191,7 +192,16 @@ fn handle_placement_input(
 
     // === タッチ入力管理 ===
     let touch_count = touches.iter().count();
-    if touch_count >= 2 {
+
+    // ダブルタップズーム中はタッチ操作をキャンセル・スキップ
+    if dtap_active.0 && drag_touch_id.is_some() {
+        *drag_touch_id = None;
+        if !matches!(placement.drag, PlacementDrag::Idle) {
+            placement.drag = PlacementDrag::Idle;
+        }
+    }
+
+    if touch_count >= 2 || dtap_active.0 {
         if drag_touch_id.is_some() {
             *drag_touch_id = None;
             if !matches!(placement.drag, PlacementDrag::Idle) {
