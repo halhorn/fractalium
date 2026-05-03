@@ -4,7 +4,7 @@
 //! - クリックで選択（バウンディングボックス表示）
 //! - ドラッグで移動（枠内）・スケール（表示枠エッジ）・回転（枠外）
 //! - Ctrl: グリッドドット表示 + スナップ（移動: 細かいグリッド, スケール: 0.05, 回転: 15°）
-//! - ダブルクリック（空白）でレプリカ追加、右クリックで削除
+//! - 右クリックで削除
 //! - Ctrl+C / Ctrl+V でレプリカのコピペ
 //! - Escape で選択解除
 
@@ -37,8 +37,6 @@ const SELECTION_COLOR: Color = Color::srgba(1.0, 1.0, 0.4, 0.9);
 const PIVOT_COLOR: Color = Color::srgba(1.0, 1.0, 0.4, 0.35);
 const HANDLE_HALF: f32 = 0.022;
 const PIVOT_ARM: f32 = 0.06;
-/// ダブルクリック判定時間（秒）。
-const DOUBLE_CLICK_SEC: f64 = 0.35;
 /// RotatePending → Rotate に昇格する最小移動距離²（これ未満は単発クリックと判定）。
 const ROTATE_START_THRESHOLD_SQ: f32 = 0.015 * 0.015;
 /// コピペ時の位置オフセット。
@@ -181,7 +179,6 @@ fn handle_placement_input(
     touches: Res<Touches>,
     dtap_active: Res<DoubleTapZoomActive>,
     mut drag_touch_id: Local<Option<u64>>,
-    time: Res<Time>,
     windows: Query<&Window, With<PrimaryWindow>>,
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
     mut contexts: EguiContexts,
@@ -308,28 +305,7 @@ fn handle_placement_input(
     // 左クリック押下
     if just_pressing {
         if let Some(pos) = cursor {
-            let now = time.elapsed_secs_f64();
-            let is_double = (now - placement.last_click_time) < DOUBLE_CLICK_SEC
-                && (pos - placement.last_click_pos).length_squared() < 0.01;
-
-            let on_replica = state.replicas.iter().any(|r| {
-                display_aabb(r, &state.base_shape.lines)
-                    .expanded(CLICK_MARGIN)
-                    .contains(pos)
-            });
-
-            if is_double && !on_replica {
-                // ダブルクリック（空白）→ レプリカを追加
-                undo_stack.push(state.clone());
-                let new_idx = state.replicas.len();
-                state.replicas.push(Replica { translation: pos, ..Replica::default_new() });
-                placement.selected = Some(new_idx);
-                placement.last_click_time = 0.0;
-            } else {
-                placement.last_click_time = now;
-                placement.last_click_pos = pos;
-                start_drag(pos, &mut state, &mut placement, &mut undo_stack);
-            }
+            start_drag(pos, &mut state, &mut placement, &mut undo_stack);
         }
     }
 

@@ -133,10 +133,6 @@ pub struct PlacementState {
     pub drag: PlacementDrag,
     /// Ctrl+C でコピーしたレプリカ。
     pub clipboard: Option<Replica>,
-    /// ダブルクリック検出用の前回クリック時刻（秒）。
-    pub last_click_time: f64,
-    /// ダブルクリック検出用の前回クリック位置（ワールド座標）。
-    pub last_click_pos: Vec2,
 }
 
 /// Placement パネルのドラッグ操作の種別と開始時のスナップショット。
