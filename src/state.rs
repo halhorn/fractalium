@@ -108,9 +108,15 @@ pub struct CanvasLayout {
 }
 
 /// UI レイアウト状態（パネルの折りたたみなど）を保持するリソース。
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct UiLayout {
     pub params_collapsed: bool,
+}
+
+impl Default for UiLayout {
+    fn default() -> Self {
+        Self { params_collapsed: true }
+    }
 }
 
 /// Placement パネルでの選択・ドラッグ状態を保持するリソース。
@@ -164,19 +170,41 @@ const UNDO_LIMIT: usize = 50;
 #[derive(Resource, Default)]
 pub struct UndoStack {
     history: Vec<FractalState>,
+    redo_stack: Vec<FractalState>,
 }
 
 impl UndoStack {
-    /// 現在の状態を履歴に積む。上限に達したら最古の履歴を破棄する。
+    /// 現在の状態を履歴に積む。redo スタックはクリアされる。
     pub fn push(&mut self, state: FractalState) {
         if self.history.len() >= UNDO_LIMIT {
             self.history.remove(0);
         }
         self.history.push(state);
+        self.redo_stack.clear();
     }
 
-    /// 最後に積んだ状態を取り出す。履歴が空なら `None`。
-    pub fn pop(&mut self) -> Option<FractalState> {
-        self.history.pop()
+    /// undo: 履歴から前の状態を取り出し、current を redo スタックに積む。
+    /// 履歴が空なら None を返す。
+    pub fn undo_pop(&mut self, current: FractalState) -> Option<FractalState> {
+        if let Some(prev) = self.history.pop() {
+            self.redo_stack.push(current);
+            Some(prev)
+        } else {
+            None
+        }
     }
+
+    /// redo: redo スタックから次の状態を取り出し、current を履歴に積む。
+    /// redo スタックが空なら None を返す。
+    pub fn redo_pop(&mut self, current: FractalState) -> Option<FractalState> {
+        if let Some(next) = self.redo_stack.pop() {
+            self.history.push(current);
+            Some(next)
+        } else {
+            None
+        }
+    }
+
+    pub fn can_undo(&self) -> bool { !self.history.is_empty() }
+    pub fn can_redo(&self) -> bool { !self.redo_stack.is_empty() }
 }

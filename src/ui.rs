@@ -2,7 +2,8 @@
 //! および各カメラへのビューポート分配を提供するモジュール。
 //!
 //! 幅 700px 以上: 左サイドパネル (Edit + Placement) + 中央 Result + 右パラメータパネル
-//! 幅 700px 未満: 上部パネル (Edit | Placement) + 中央 Result + 下部パラメータパネル
+//! 幅 700px 未満: 上部 Result + 中段グローバル操作バー + 下部 (Edit | Placement)
+//!               + 右端 Parameters オーバーレイ
 
 use bevy::camera::Viewport;
 use bevy::prelude::*;
@@ -105,6 +106,8 @@ fn layout_wide(
             } else {
                 if ui.button("◀").clicked() { ui_layout.params_collapsed = true; }
                 ui.separator();
+                ui.heading("Parameters");
+                ui.separator();
                 draw_params_controls(ui, state, undo_stack, placement, buttons);
             }
         });
@@ -119,8 +122,11 @@ fn layout_wide(
         .exact_width(left_panel_w)
         .show(ctx, |ui| {
             let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
-                snap_toggle_buttons(ui, state);
-                ui.separator();
+                let can_del = !state.base_shape.lines.is_empty();
+                if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
+                    undo_stack.push(state.clone());
+                    state.base_shape.lines.pop();
+                }
                 if ui.small_button("Clear").clicked() {
                     undo_stack.push(state.clone());
                     state.base_shape.lines.clear();
@@ -132,6 +138,14 @@ fn layout_wide(
                     undo_stack.push(state.clone());
                     placement.selected = Some(state.replicas.len());
                     state.replicas.push(Replica::default_new());
+                }
+                let can_del = placement.selected.is_some_and(|i| i < state.replicas.len());
+                if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
+                    if let Some(i) = placement.selected {
+                        undo_stack.push(state.clone());
+                        state.replicas.remove(i);
+                        placement.selected = None;
+                    }
                 }
             });
             (edit_rect, placement_rect)
@@ -153,39 +167,19 @@ fn layout_wide(
 fn layout_narrow(
     ctx: &egui::Context,
     win_w: f32,
-    _win_h: f32,
+    win_h: f32,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
     buttons: &ButtonInput<MouseButton>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
-    // Bottom: Params panel (collapsible)
-    let params_inner_h = if ui_layout.params_collapsed { 0.0_f32 } else { 180.0_f32 };
-    let params_panel_h = params_inner_h + 32.0; // ボタン行 + コンテンツ
-    let bottom_resp = egui::TopBottomPanel::bottom("params_bottom")
-        .exact_height(params_panel_h)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                let label = if ui_layout.params_collapsed { "▲ Parameters" } else { "▼ Parameters" };
-                if ui.button(label).clicked() {
-                    ui_layout.params_collapsed = !ui_layout.params_collapsed;
-                }
-            });
-            if !ui_layout.params_collapsed {
-                ui.separator();
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    draw_params_controls(ui, state, undo_stack, placement, buttons);
-                });
-            }
-        });
-
-    // Top: Edit + Placement side by side
+    // 1. 下部: Edit + Placement キャンバス
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
-    let top_panel_h = canvas_side + 52.0;
-    let top_resp = egui::TopBottomPanel::top("top_canvases")
-        .frame(egui::Frame::default()) // パネルのデフォルト灰色背景を透明化
-        .exact_height(top_panel_h)
+    let bottom_h = canvas_side + 52.0;
+    let bottom_resp = egui::TopBottomPanel::bottom("bottom_canvases")
+        .frame(egui::Frame::default())
+        .exact_height(bottom_h)
         .show(ctx, |ui| {
             let half_w = ui.available_width() / 2.0;
             let mut edit_rect = egui::Rect::NOTHING;
@@ -193,7 +187,11 @@ fn layout_narrow(
             ui.columns(2, |cols| {
                 cols[0].set_max_width(half_w);
                 edit_rect = show_canvas_block(&mut cols[0], "Base Shape", |ui| {
-                    snap_toggle_buttons(ui, state);
+                    let can_del = !state.base_shape.lines.is_empty();
+                    if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
+                        undo_stack.push(state.clone());
+                        state.base_shape.lines.pop();
+                    }
                 });
                 cols[1].set_max_width(half_w);
                 placement_rect = show_canvas_block(&mut cols[1], "Placement", |ui| {
@@ -202,16 +200,40 @@ fn layout_narrow(
                         placement.selected = Some(state.replicas.len());
                         state.replicas.push(Replica::default_new());
                     }
+                    let can_del = placement.selected.is_some_and(|i| i < state.replicas.len());
+                    if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
+                        if let Some(i) = placement.selected {
+                            undo_stack.push(state.clone());
+                            state.replicas.remove(i);
+                            placement.selected = None;
+                        }
+                    }
                 });
             });
             (edit_rect, placement_rect)
         });
 
-    let (edit_egui_rect, placement_egui_rect) = top_resp.inner;
+    // 2. グローバル操作バー（Edit/Placement の直上）
+    let global_resp = egui::TopBottomPanel::bottom("global_controls")
+        .exact_height(36.0)
+        .show(ctx, |ui| {
+            global_controls_bar(ui, state, undo_stack);
+        });
 
+    let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
+
+    // 3. Result: 残り領域（上部全体）
     let result_rect = egui::Rect::from_min_max(
-        egui::pos2(0.0, top_resp.response.rect.max.y),
-        egui::pos2(win_w, bottom_resp.response.rect.min.y),
+        egui::pos2(0.0, 0.0),
+        egui::pos2(win_w, global_resp.response.rect.min.y),
+    );
+
+    // 4. Parameters オーバーレイ（Edit/Placement 領域の右端に浮かせる）
+    let overlay_top = global_resp.response.rect.min.y;
+    let overlay_h = win_h - overlay_top;
+    params_overlay_narrow(
+        ctx, win_w, overlay_top, overlay_h,
+        state, undo_stack, placement, buttons, ui_layout,
     );
 
     (edit_egui_rect, placement_egui_rect, result_rect)
@@ -219,15 +241,107 @@ fn layout_narrow(
 
 // === 共通 UI パーツ ===
 
-/// グリッドスナップのトグルボタンを描画する。
-fn snap_toggle_buttons(ui: &mut egui::Ui, state: &mut FractalState) {
-    let mut btn = egui::Button::new("snap grid");
-    if state.snap_grid {
-        btn = btn.fill(egui::Color32::from_rgb(60, 120, 60));
-    }
-    if ui.add(btn).clicked() {
-        state.snap_grid = !state.snap_grid;
-    }
+/// undo / redo / snap / depth / gen を横一列に並べた操作バー。
+fn global_controls_bar(
+    ui: &mut egui::Ui,
+    state: &mut FractalState,
+    undo_stack: &mut UndoStack,
+) {
+    ui.horizontal(|ui| {
+        // Undo / Redo
+        if ui.add_enabled(undo_stack.can_undo(), egui::Button::new("↩")).clicked() {
+            if let Some(prev) = undo_stack.undo_pop(state.clone()) {
+                *state = prev;
+            }
+        }
+        if ui.add_enabled(undo_stack.can_redo(), egui::Button::new("↪")).clicked() {
+            if let Some(next) = undo_stack.redo_pop(state.clone()) {
+                *state = next;
+            }
+        }
+        ui.separator();
+
+        // Snap grid
+        let mut snap_btn = egui::Button::new("Snap");
+        if state.snap_grid {
+            snap_btn = snap_btn.fill(egui::Color32::from_rgb(60, 120, 60));
+        }
+        if ui.add(snap_btn).clicked() {
+            state.snap_grid = !state.snap_grid;
+        }
+        ui.separator();
+
+        // Depth
+        ui.label("D");
+        if ui.small_button("−").clicked() && state.depth > 1 {
+            state.depth -= 1;
+        }
+        ui.label(format!("{}", state.depth));
+        if ui.small_button("+").clicked() && state.depth < 12 {
+            state.depth += 1;
+        }
+        ui.separator();
+
+        // Show all generations
+        let mut gen_btn = egui::Button::new("Gen");
+        if state.show_all_generations {
+            gen_btn = gen_btn.fill(egui::Color32::from_rgb(60, 60, 120));
+        }
+        if ui.add(gen_btn).clicked() {
+            state.show_all_generations = !state.show_all_generations;
+        }
+    });
+}
+
+/// Parameters パネルを Edit/Placement 領域の右端に overlay で表示する。
+fn params_overlay_narrow(
+    ctx: &egui::Context,
+    win_w: f32,
+    top_y: f32,
+    total_h: f32,
+    state: &mut FractalState,
+    undo_stack: &mut UndoStack,
+    placement: &mut PlacementState,
+    buttons: &ButtonInput<MouseButton>,
+    ui_layout: &mut UiLayout,
+) {
+    let panel_w = 200.0_f32;
+    let pos_x = if ui_layout.params_collapsed { win_w - 28.0 } else { win_w - panel_w };
+
+    egui::Area::new(egui::Id::new("params_overlay"))
+        .fixed_pos(egui::pos2(pos_x, top_y))
+        .order(egui::Order::Foreground)
+        .show(ctx, |ui| {
+            overlay_frame().show(ui, |ui| {
+                if ui_layout.params_collapsed {
+                    if ui.button("◀").clicked() {
+                        ui_layout.params_collapsed = false;
+                    }
+                } else {
+                    ui.set_min_width(panel_w - 20.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("▶").clicked() {
+                            ui_layout.params_collapsed = true;
+                        }
+                        ui.label(egui::RichText::new("Parameters").strong());
+                    });
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .max_height(total_h - 48.0)
+                        .show(ui, |ui| {
+                            draw_params_controls(ui, state, undo_stack, placement, buttons);
+                        });
+                }
+            });
+        });
+}
+
+fn overlay_frame() -> egui::Frame {
+    egui::Frame::default()
+        .inner_margin(egui::Margin::same(8))
+        .fill(egui::Color32::from_rgb(28, 28, 36))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 70, 90)))
+        .corner_radius(egui::CornerRadius::same(4))
 }
 
 /// タイトルヘッダ＋キャンバス本体を持つブロックを描画し、本体の egui::Rect を返す。
@@ -287,9 +401,6 @@ fn draw_params_controls(
     placement: &mut PlacementState,
     buttons: &ButtonInput<MouseButton>,
 ) {
-    ui.heading("Parameters");
-    ui.separator();
-
     let mut depth = state.depth;
     let depth_resp = ui.add(egui::Slider::new(&mut depth, 1..=12).text("Depth"));
     let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);

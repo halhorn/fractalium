@@ -166,12 +166,12 @@ fn handle_undo(
     mut draw_state: ResMut<DrawState>,
 ) {
     let cmd = keys.pressed(KeyCode::SuperLeft) || keys.pressed(KeyCode::SuperRight);
-    if cmd
-        && keys.just_pressed(KeyCode::KeyZ)
-        && let Some(prev) = undo_stack.pop()
-    {
-        *state = prev;
-        *draw_state = DrawState::Idle;
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    if (cmd || ctrl) && keys.just_pressed(KeyCode::KeyZ) {
+        if let Some(prev) = undo_stack.undo_pop(state.clone()) {
+            *state = prev;
+            *draw_state = DrawState::Idle;
+        }
     }
 }
 

@@ -30,6 +30,16 @@
 - パフォーマンス最適化（深い階層・多複製でも軽快に動作）
 - 操作性向上（undo/redo, スナップ, ガイド等）
 
+### Mobile UX 改善
+
+スマホでの操作感を最適化。詳細は [`mobile_ux/overall_plan.md`](mobile_ux/overall_plan.md) を参照。
+
+- ナローレイアウト再設計（Result 上部大・操作系下部）
+- グローバル操作パネル（undo/redo/snap/depth/gen）
+- 削除ボタン追加（Base Shape, Placement）
+- Result ドラッグでパン
+- Edit/Placement ピンチズーム
+
 ## 受け入れ条件
 
 - [ ] Phase 1 (MVP) が完了している
