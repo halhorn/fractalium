@@ -383,9 +383,9 @@ fn draw_canvas(
         draw_grid(&mut gizmos, cursor.map(snap_to_grid));
     }
 
-    if let DrawState::DrawingLine { start, .. } = *draw_state
-        && let Some(raw_end) = cursor
-    {
+    // cursor はマウス座標のみ。タッチ中は None になるため last_cursor をフォールバックに使う。
+    if let DrawState::DrawingLine { start, last_cursor } = *draw_state {
+        let raw_end = cursor.unwrap_or(last_cursor);
         let (end, color) = snap_endpoint(start, raw_end, &modifiers);
         gizmos.line_2d(start, end, color);
     }

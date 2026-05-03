@@ -184,6 +184,7 @@ fn layout_narrow(
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
     let top_panel_h = canvas_side + 52.0;
     let top_resp = egui::TopBottomPanel::top("top_canvases")
+        .frame(egui::Frame::default()) // パネルのデフォルト灰色背景を透明化
         .exact_height(top_panel_h)
         .show(ctx, |ui| {
             let half_w = ui.available_width() / 2.0;
