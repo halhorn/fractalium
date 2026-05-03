@@ -10,6 +10,7 @@
 
 use std::f32::consts::PI;
 
+use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
@@ -135,19 +136,22 @@ fn display_aabb(replica: &Replica, lines: &[Line]) -> Aabb {
 
 // === カーソル変換 ===
 
-fn cursor_in_placement(window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
-    let cursor = window.cursor_position()?;
+fn world_pos_in_placement(screen: Vec2, window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
     if let Some(ref vp) = cam.viewport {
         let scale = window.scale_factor();
         let vp_min = vp.physical_position.as_vec2() / scale;
         let vp_size = vp.physical_size.as_vec2() / scale;
-        if cursor.x < vp_min.x || cursor.y < vp_min.y
-            || cursor.x > vp_min.x + vp_size.x || cursor.y > vp_min.y + vp_size.y
+        if screen.x < vp_min.x || screen.y < vp_min.y
+            || screen.x > vp_min.x + vp_size.x || screen.y > vp_min.y + vp_size.y
         {
             return None;
         }
     }
-    cam.viewport_to_world_2d(cam_tf, cursor).ok()
+    cam.viewport_to_world_2d(cam_tf, screen).ok()
+}
+
+fn cursor_in_placement(window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
+    world_pos_in_placement(window.cursor_position()?, window, cam, cam_tf)
 }
 
 /// ワールド座標 → egui 画面論理座標（Placement カメラ使用）。
@@ -174,6 +178,8 @@ fn handle_placement_input(
     mut undo_stack: ResMut<UndoStack>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
+    touches: Res<Touches>,
+    mut drag_touch_id: Local<Option<u64>>,
     time: Res<Time>,
     windows: Query<&Window, With<PrimaryWindow>>,
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
@@ -181,8 +187,45 @@ fn handle_placement_input(
 ) {
     let Ok(window) = windows.single() else { return; };
     let Ok((cam, cam_tf)) = placement_cam.single() else { return; };
-    let cursor = cursor_in_placement(window, cam, cam_tf);
-    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || state.snap_grid;
+
+    // === タッチ入力管理 ===
+    let touch_count = touches.iter().count();
+    if touch_count >= 2 {
+        if drag_touch_id.is_some() {
+            *drag_touch_id = None;
+            if !matches!(placement.drag, PlacementDrag::Idle) {
+                placement.drag = PlacementDrag::Idle;
+            }
+        }
+    } else if drag_touch_id.is_none() {
+        if let Some(t) = touches.iter_just_pressed().next() {
+            *drag_touch_id = Some(t.id());
+        }
+    }
+
+    let (touch_just_pressed, touch_pressed, touch_just_released, touch_screen_pos): (bool, bool, bool, Option<Vec2>) =
+        if let Some(drag_id) = *drag_touch_id {
+            let active = touches.iter().find(|t| t.id() == drag_id);
+            let released = touches.iter_just_released().find(|t| t.id() == drag_id);
+            let just_pressed = touches.just_pressed(drag_id);
+            let just_released = released.is_some();
+            let screen_pos = active.map(|t| t.position())
+                .or_else(|| released.map(|t| t.position()));
+            if just_released { *drag_touch_id = None; }
+            (just_pressed, active.is_some(), just_released, screen_pos)
+        } else {
+            (false, false, false, None)
+        };
+
+    let use_touch = touch_pressed || touch_just_pressed || touch_just_released;
+    let pressing = if use_touch { touch_pressed } else { buttons.pressed(MouseButton::Left) };
+    let just_pressing = if use_touch { touch_just_pressed } else { buttons.just_pressed(MouseButton::Left) };
+    let just_releasing = if use_touch { touch_just_released } else { buttons.just_released(MouseButton::Left) };
+
+    let cursor: Option<Vec2> = touch_screen_pos
+        .or_else(|| window.cursor_position())
+        .and_then(|pos| world_pos_in_placement(pos, window, cam, cam_tf));
 
     // Escape: 選択解除
     if keys.just_pressed(KeyCode::Escape) {
@@ -228,9 +271,7 @@ fn handle_placement_input(
     }
 
     // ドラッグ継続・終了は egui_wants_pointer に関わらず処理する。
-    // 押下時にすでにキャンバスを掴んでいた（PlacementDrag が非 Idle）場合のみ動作するので安全。
-    if buttons.pressed(MouseButton::Left) {
-        // RotatePending: 閾値を超えたら Rotate に昇格（ここで初めて undo を積む）
+    if pressing {
         if let PlacementDrag::RotatePending { pivot, start_cursor, start_angle, start_rotation } = placement.drag {
             if let Some(pos) = cursor {
                 if (pos - start_cursor).length_squared() > ROTATE_START_THRESHOLD_SQ {
@@ -243,8 +284,7 @@ fn handle_placement_input(
             apply_drag(pos, ctrl, &mut state, &mut placement);
         }
     }
-    if buttons.just_released(MouseButton::Left) && !matches!(placement.drag, PlacementDrag::Idle) {
-        // RotatePending のまま離した = 移動なしの単発クリック → 選択解除
+    if just_releasing && !matches!(placement.drag, PlacementDrag::Idle) {
         if matches!(placement.drag, PlacementDrag::RotatePending { .. }) {
             placement.selected = None;
         }
@@ -256,7 +296,7 @@ fn handle_placement_input(
     }
 
     // 左クリック押下
-    if buttons.just_pressed(MouseButton::Left) {
+    if just_pressing {
         if let Some(pos) = cursor {
             let now = time.elapsed_secs_f64();
             let is_double = (now - placement.last_click_time) < DOUBLE_CLICK_SEC
@@ -440,11 +480,12 @@ fn update_placement_cursor(
 /// Ctrl 押下中に細かいグリッドドットを表示する。
 fn draw_placement_ctrl_grid(
     keys: Res<ButtonInput<KeyCode>>,
+    state: Res<FractalState>,
     windows: Query<&Window, With<PrimaryWindow>>,
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
     mut gizmos: Gizmos<PlacementGizmos>,
 ) {
-    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || state.snap_grid;
     if !ctrl { return; }
     let Ok(window) = windows.single() else { return; };
     let Ok((cam, cam_tf)) = placement_cam.single() else { return; };
@@ -531,9 +572,9 @@ fn placement_overlay_ui(
     };
 
     // Placement パネル内に収まっているときのみ表示
-    let top_h = layout.top_h_logical;
-    let left_w = layout.left_w_logical;
-    if btn_pos.x < 0.0 || btn_pos.x > left_w || btn_pos.y < top_h {
+    if btn_pos.x < layout.placement_min_x || btn_pos.x > layout.placement_max_x
+        || btn_pos.y < layout.placement_min_y || btn_pos.y > layout.placement_max_y
+    {
         return Ok(());
     }
 

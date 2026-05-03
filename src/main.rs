@@ -50,6 +50,9 @@ fn main() {
             primary_window: Some(Window {
                 title: "Fractalium".to_string(),
                 resolution: (1280, 720).into(),
+                canvas: Some("#fractalium-canvas".into()),
+                fit_canvas_to_parent: true,
+                prevent_default_event_handling: true,
                 ..default()
             }),
             ..default()

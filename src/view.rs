@@ -2,6 +2,7 @@
 
 use bevy::camera::Projection;
 use bevy::input::mouse::AccumulatedMouseScroll;
+use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -26,11 +27,20 @@ struct PanState {
     last_cursor_screen: Vec2,
 }
 
+/// 2 本指ピンチズームの追跡状態。
+#[derive(Resource, Default)]
+struct PinchState {
+    active: bool,
+    prev_distance: f32,
+    prev_midpoint: Vec2,
+}
+
 pub struct ViewPlugin;
 
 impl Plugin for ViewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PanState>()
+            .init_resource::<PinchState>()
             .add_systems(
                 Update,
                 (
@@ -38,6 +48,7 @@ impl Plugin for ViewPlugin {
                     zoom_canvas::<PlacementCamera>,
                     zoom_canvas::<ResultCamera>,
                     pan_result,
+                    handle_pinch_zoom,
                 ),
             );
     }
@@ -136,5 +147,46 @@ fn pan_result(
             transform.translation.y -= delta.y;
         }
         pan_state.last_cursor_screen = cursor_screen;
+    }
+}
+
+/// 2 本指ピンチで Result カメラをズームする。
+fn handle_pinch_zoom(
+    touches: Res<Touches>,
+    mut pinch: ResMut<PinchState>,
+    mut result_cam_q: Query<(&Camera, &GlobalTransform, &mut Projection, &mut Transform), With<ResultCamera>>,
+) {
+    let positions: Vec<Vec2> = touches.iter().map(|t| t.position()).collect();
+
+    if positions.len() == 2 {
+        let distance = (positions[1] - positions[0]).length();
+        let midpoint = (positions[0] + positions[1]) * 0.5;
+
+        if pinch.active && pinch.prev_distance > 0.0 {
+            let Ok((cam, cam_tf, mut proj, mut transform)) = result_cam_q.single_mut() else {
+                pinch.prev_distance = distance;
+                pinch.prev_midpoint = midpoint;
+                return;
+            };
+            if let Projection::Orthographic(ref mut ortho) = *proj {
+                let scale_factor = pinch.prev_distance / distance;
+                let old_scale = ortho.scale;
+                let new_scale = (old_scale * scale_factor).clamp(ZOOM_MIN, ZOOM_MAX);
+                let scale_ratio = new_scale / old_scale;
+
+                if let Ok(mid_world) = cam.viewport_to_world_2d(cam_tf, midpoint) {
+                    transform.translation.x += (mid_world.x - transform.translation.x) * (1.0 - scale_ratio);
+                    transform.translation.y += (mid_world.y - transform.translation.y) * (1.0 - scale_ratio);
+                }
+                ortho.scale = new_scale;
+            }
+        }
+
+        pinch.active = true;
+        pinch.prev_distance = distance;
+        pinch.prev_midpoint = midpoint;
+    } else {
+        pinch.active = false;
+        pinch.prev_distance = 0.0;
     }
 }

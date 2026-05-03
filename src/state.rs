@@ -13,6 +13,8 @@ pub struct FractalState {
     pub depth: u32,
     /// true のとき、末端世代だけでなく途中世代の図形も描画する
     pub show_all_generations: bool,
+    /// グリッドスナップ（Ctrl 相当）のトグル状態。
+    pub snap_grid: bool,
 }
 
 impl Default for FractalState {
@@ -23,6 +25,7 @@ impl Default for FractalState {
             replicas: vec![],
             depth: 4,
             show_all_generations: false,
+            snap_grid: false,
         }
     }
 }
@@ -95,13 +98,13 @@ impl Replica {
     }
 }
 
-/// 各パネルの論理ピクセルサイズを保持するリソース（egui オーバーレイの位置合わせに使用）。
+/// Placement キャンバスの論理ピクセル矩形（egui オーバーレイの位置合わせに使用）。
 #[derive(Resource, Default)]
 pub struct CanvasLayout {
-    /// Edit / Placement パネルの幅（論理ピクセル）。
-    pub left_w_logical: f32,
-    /// Edit パネルの高さ（＝ Placement パネルの上端、論理ピクセル）。
-    pub top_h_logical: f32,
+    pub placement_min_x: f32,
+    pub placement_max_x: f32,
+    pub placement_min_y: f32,
+    pub placement_max_y: f32,
 }
 
 /// UI レイアウト状態（パネルの折りたたみなど）を保持するリソース。

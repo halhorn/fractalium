@@ -1,5 +1,8 @@
 //! 右側のパラメータパネル（egui）と左側ペイン（Base Shape / Placement）の描画、
 //! および各カメラへのビューポート分配を提供するモジュール。
+//!
+//! 幅 700px 以上: 左サイドパネル (Edit + Placement) + 中央 Result + 右パラメータパネル
+//! 幅 700px 未満: 上部パネル (Edit | Placement) + 中央 Result + 下部パラメータパネル
 
 use bevy::camera::Viewport;
 use bevy::prelude::*;
@@ -41,80 +44,26 @@ fn params_panel(
     >,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Ok(window) = windows.single() else {
-        return Ok(());
-    };
+    let Ok(window) = windows.single() else { return Ok(()); };
     let scale = window.scale_factor();
-    let win_h_log = window.height();
-
-    // ── Right: Params panel (collapsible) ──
-    let collapsed = ui_layout.params_collapsed;
-    let params_w = if collapsed { 28.0_f32 } else { 240.0_f32 };
-    let right_resp = egui::SidePanel::right("params")
-        .exact_width(params_w)
-        .show(ctx, |ui| {
-            if collapsed {
-                if ui.button("▶").clicked() {
-                    ui_layout.params_collapsed = false;
-                }
-            } else {
-                if ui.button("◀").clicked() {
-                    ui_layout.params_collapsed = true;
-                }
-                ui.separator();
-                draw_params_controls(ui, &mut state, &mut undo_stack, &mut placement, &buttons);
-            }
-        });
-    let central_right_x = right_resp.response.rect.min.x;
-
-    // ── Left: Base Shape + Placement panel ──
-    // side: 正方形の一辺。ウィンドウ高さの 1/3 程度を目安とする。
-    let side = (win_h_log / 3.0).max(80.0);
-    let left_panel_w = side + 2.0 * 8.0 + 6.0; // inner_margin * 2 + frame stroke + panel margin
-
-    // SidePanel のデフォルト背景を透明にして Bevy カメラ描画を透過させる
-    let left_resp = egui::SidePanel::left("left_pane")
-        .frame(egui::Frame::default())
-        .exact_width(left_panel_w)
-        .show(ctx, |ui| {
-            let edit_rect = show_canvas_block(
-                ui,
-                "Base Shape",
-                |ui| {
-                    if ui.button("Clear lines").clicked() {
-                        undo_stack.push(state.clone());
-                        state.base_shape.lines.clear();
-                    }
-                },
-            );
-
-            ui.add_space(4.0);
-
-            let placement_rect = show_canvas_block(
-                ui,
-                "Placement",
-                |ui| {
-                    if ui.button("+ Add replica").clicked() {
-                        undo_stack.push(state.clone());
-                        placement.selected = Some(state.replicas.len());
-                        state.replicas.push(Replica::default_new());
-                    }
-                },
-            );
-
-            (edit_rect, placement_rect)
-        });
-
-    let central_left_x = left_resp.response.rect.max.x;
-    let (edit_egui_rect, placement_egui_rect) = left_resp.inner;
-
-    // ── Result viewport: 左パネル右端〜右パネル左端、全高 ──
-    let central_rect = egui::Rect::from_min_max(
-        egui::pos2(central_left_x, 0.0),
-        egui::pos2(central_right_x, win_h_log),
-    );
-
+    let win_w = window.width();
+    let win_h = window.height();
     let win_phys = UVec2::new(window.physical_width(), window.physical_height());
+
+    let is_narrow = win_w < 700.0;
+
+    let (edit_egui_rect, placement_egui_rect, result_egui_rect) = if is_narrow {
+        layout_narrow(
+            ctx, win_w, win_h,
+            &mut state, &mut undo_stack, &mut placement, &mut ui_layout, &buttons,
+        )
+    } else {
+        layout_wide(
+            ctx, win_w, win_h,
+            &mut state, &mut undo_stack, &mut placement, &mut ui_layout, &buttons,
+        )
+    };
+
     if let Ok(mut cam) = edit_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
     }
@@ -122,14 +71,162 @@ fn params_panel(
         cam.viewport = egui_rect_to_viewport(placement_egui_rect, scale, win_phys);
     }
     if let Ok(mut cam) = result_cam.single_mut() {
-        cam.viewport = egui_rect_to_viewport(central_rect, scale, win_phys);
+        cam.viewport = egui_rect_to_viewport(result_egui_rect, scale, win_phys);
     }
 
-    // placement_overlay_ui の境界チェック用に更新
-    layout.left_w_logical = placement_egui_rect.max.x;
-    layout.top_h_logical = placement_egui_rect.min.y;
+    layout.placement_min_x = placement_egui_rect.min.x;
+    layout.placement_max_x = placement_egui_rect.max.x;
+    layout.placement_min_y = placement_egui_rect.min.y;
+    layout.placement_max_y = placement_egui_rect.max.y;
 
     Ok(())
+}
+
+// === ワイドレイアウト（幅 700px 以上）===
+
+fn layout_wide(
+    ctx: &egui::Context,
+    _win_w: f32,
+    win_h: f32,
+    state: &mut FractalState,
+    undo_stack: &mut UndoStack,
+    placement: &mut PlacementState,
+    ui_layout: &mut UiLayout,
+    buttons: &ButtonInput<MouseButton>,
+) -> (egui::Rect, egui::Rect, egui::Rect) {
+    // Right: Params panel
+    let collapsed = ui_layout.params_collapsed;
+    let params_w = if collapsed { 28.0_f32 } else { 240.0_f32 };
+    let right_resp = egui::SidePanel::right("params")
+        .exact_width(params_w)
+        .show(ctx, |ui| {
+            if collapsed {
+                if ui.button("▶").clicked() { ui_layout.params_collapsed = false; }
+            } else {
+                if ui.button("◀").clicked() { ui_layout.params_collapsed = true; }
+                ui.separator();
+                draw_params_controls(ui, state, undo_stack, placement, buttons);
+            }
+        });
+    let central_right_x = right_resp.response.rect.min.x;
+
+    // Left: Base Shape + Placement
+    let side = (win_h / 3.0).max(80.0);
+    let left_panel_w = side + 2.0 * 8.0 + 6.0;
+
+    let left_resp = egui::SidePanel::left("left_pane")
+        .frame(egui::Frame::default())
+        .exact_width(left_panel_w)
+        .show(ctx, |ui| {
+            let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
+                snap_toggle_buttons(ui, state);
+                ui.separator();
+                if ui.small_button("Clear").clicked() {
+                    undo_stack.push(state.clone());
+                    state.base_shape.lines.clear();
+                }
+            });
+            ui.add_space(4.0);
+            let placement_rect = show_canvas_block(ui, "Placement", |ui| {
+                if ui.small_button("+ Add").clicked() {
+                    undo_stack.push(state.clone());
+                    placement.selected = Some(state.replicas.len());
+                    state.replicas.push(Replica::default_new());
+                }
+            });
+            (edit_rect, placement_rect)
+        });
+
+    let central_left_x = left_resp.response.rect.max.x;
+    let (edit_egui_rect, placement_egui_rect) = left_resp.inner;
+
+    let result_rect = egui::Rect::from_min_max(
+        egui::pos2(central_left_x, 0.0),
+        egui::pos2(central_right_x, win_h),
+    );
+
+    (edit_egui_rect, placement_egui_rect, result_rect)
+}
+
+// === ナローレイアウト（幅 700px 未満: 縦持ちモバイル向け）===
+
+fn layout_narrow(
+    ctx: &egui::Context,
+    win_w: f32,
+    _win_h: f32,
+    state: &mut FractalState,
+    undo_stack: &mut UndoStack,
+    placement: &mut PlacementState,
+    ui_layout: &mut UiLayout,
+    buttons: &ButtonInput<MouseButton>,
+) -> (egui::Rect, egui::Rect, egui::Rect) {
+    // Bottom: Params panel (collapsible)
+    let params_inner_h = if ui_layout.params_collapsed { 0.0_f32 } else { 180.0_f32 };
+    let params_panel_h = params_inner_h + 32.0; // ボタン行 + コンテンツ
+    let bottom_resp = egui::TopBottomPanel::bottom("params_bottom")
+        .exact_height(params_panel_h)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let label = if ui_layout.params_collapsed { "▲ Parameters" } else { "▼ Parameters" };
+                if ui.button(label).clicked() {
+                    ui_layout.params_collapsed = !ui_layout.params_collapsed;
+                }
+            });
+            if !ui_layout.params_collapsed {
+                ui.separator();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    draw_params_controls(ui, state, undo_stack, placement, buttons);
+                });
+            }
+        });
+
+    // Top: Edit + Placement side by side
+    let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
+    let top_panel_h = canvas_side + 52.0;
+    let top_resp = egui::TopBottomPanel::top("top_canvases")
+        .exact_height(top_panel_h)
+        .show(ctx, |ui| {
+            let half_w = ui.available_width() / 2.0;
+            let mut edit_rect = egui::Rect::NOTHING;
+            let mut placement_rect = egui::Rect::NOTHING;
+            ui.columns(2, |cols| {
+                cols[0].set_max_width(half_w);
+                edit_rect = show_canvas_block(&mut cols[0], "Base Shape", |ui| {
+                    snap_toggle_buttons(ui, state);
+                });
+                cols[1].set_max_width(half_w);
+                placement_rect = show_canvas_block(&mut cols[1], "Placement", |ui| {
+                    if ui.small_button("+").clicked() {
+                        undo_stack.push(state.clone());
+                        placement.selected = Some(state.replicas.len());
+                        state.replicas.push(Replica::default_new());
+                    }
+                });
+            });
+            (edit_rect, placement_rect)
+        });
+
+    let (edit_egui_rect, placement_egui_rect) = top_resp.inner;
+
+    let result_rect = egui::Rect::from_min_max(
+        egui::pos2(0.0, top_resp.response.rect.max.y),
+        egui::pos2(win_w, bottom_resp.response.rect.min.y),
+    );
+
+    (edit_egui_rect, placement_egui_rect, result_rect)
+}
+
+// === 共通 UI パーツ ===
+
+/// グリッドスナップのトグルボタンを描画する。
+fn snap_toggle_buttons(ui: &mut egui::Ui, state: &mut FractalState) {
+    let mut btn = egui::Button::new("snap grid");
+    if state.snap_grid {
+        btn = btn.fill(egui::Color32::from_rgb(60, 120, 60));
+    }
+    if ui.add(btn).clicked() {
+        state.snap_grid = !state.snap_grid;
+    }
 }
 
 /// タイトルヘッダ＋キャンバス本体を持つブロックを描画し、本体の egui::Rect を返す。
@@ -146,7 +243,6 @@ fn show_canvas_block(
             });
             ui.separator();
             let s = ui.available_width();
-            // fill を塗らず Bevy カメラの出力をそのまま透過させる
             let (rect, _resp) = ui.allocate_exact_size(egui::Vec2::splat(s), egui::Sense::hover());
             rect
         })
@@ -154,7 +250,6 @@ fn show_canvas_block(
 }
 
 fn canvas_block_frame() -> egui::Frame {
-    // fill を TRANSPARENT にして Bevy カメラ描画を透過させる
     egui::Frame::default()
         .inner_margin(egui::Margin::same(8))
         .fill(egui::Color32::TRANSPARENT)
@@ -162,15 +257,11 @@ fn canvas_block_frame() -> egui::Frame {
 }
 
 /// egui 論理ピクセル Rect → Bevy 物理ピクセル Viewport。
-/// ウィンドウ外や幅 0 の場合は None を返してクラッシュを防ぐ。
 fn egui_rect_to_viewport(rect: egui::Rect, scale: f32, win_phys: UVec2) -> Option<Viewport> {
     let x = ((rect.min.x * scale).round() as i32).max(0) as u32;
     let y = ((rect.min.y * scale).round() as i32).max(0) as u32;
-    // ウィンドウ境界を超えないようにサイズをクランプ
-    let w = ((rect.width() * scale).round() as i32)
-        .max(0) as u32;
-    let h = ((rect.height() * scale).round() as i32)
-        .max(0) as u32;
+    let w = ((rect.width() * scale).round() as i32).max(0) as u32;
+    let h = ((rect.height() * scale).round() as i32).max(0) as u32;
     if x >= win_phys.x || y >= win_phys.y || w == 0 || h == 0 {
         return None;
     }
@@ -198,9 +289,6 @@ fn draw_params_controls(
     ui.heading("Parameters");
     ui.separator();
 
-    // ローカルバッファ経由で Bevy の入力状態をゲートとして使う。
-    // egui が dragged 状態のまま残った場合（bevy_egui の入力同期ズレ）でも
-    // Bevy がボタン非押下と報告していれば値を更新しない。
     let mut depth = state.depth;
     let depth_resp = ui.add(egui::Slider::new(&mut depth, 1..=12).text("Depth"));
     let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);

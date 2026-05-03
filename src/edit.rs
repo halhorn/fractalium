@@ -1,12 +1,12 @@
 //! Edit キャンバス上での編集機能を提供するモジュール。
 //!
 //! 役割:
-//! - マウスドラッグによる線分入力（Ctrl/Shift スナップ対応）
+//! - マウス／タッチドラッグによる線分入力（Ctrl/Shift スナップ対応）
 //! - 既存線のクリック選択・平行移動・端点個別移動
 //! - Delete/Backspace で選択線を削除、Escape で選択解除
 //! - Cmd+Z による Undo
-//! - 確定済み線分・選択ハイライト・端点◯・ドラッグ中プレビューの描画
 
+use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
@@ -23,49 +23,37 @@ const PREVIEW_COLOR: Color = Color::srgb(1.0, 0.8, 0.4);
 const SNAP_PREVIEW_COLOR: Color = Color::srgb(0.4, 1.0, 0.6);
 const GRID_PREVIEW_COLOR: Color = Color::srgb(0.4, 0.8, 1.0);
 const ENDPOINT_COLOR: Color = Color::srgba(1.0, 1.0, 0.45, 0.9);
-/// 端点◯の表示半径。
 const ENDPOINT_RADIUS: f32 = 0.035;
-/// 端点のクリック判定半径（表示半径より広め）。
 const ENDPOINT_HIT_RADIUS: f32 = 0.07;
-/// 線本体のクリック判定距離。
 const LINE_HIT_DISTANCE: f32 = 0.05;
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct EditGizmos;
 
-/// 線の端点 A / B を区別する。
 #[derive(Clone, Copy)]
 pub enum LineEnd {
     A,
     B,
 }
 
-/// Edit キャンバスの操作状態。
 #[derive(Resource, Default)]
 pub enum DrawState {
-    /// 何も選択なし。ドラッグで新規線描画可能。
     #[default]
     Idle,
-    /// 線を選択中（インデックス）。
     Selected(usize),
-    /// 新しい線を描画中。
     DrawingLine {
         start: Vec2,
-        /// リリースフレームで cursor が None のときのフォールバック。
         last_cursor: Vec2,
     },
-    /// 選択中の線全体を平行移動中。
     MovingLine {
         idx: usize,
         cursor_start: Vec2,
         line_a_start: Vec2,
         line_b_start: Vec2,
     },
-    /// 選択中の線の片端を移動中。
     MovingEndpoint {
         idx: usize,
         end: LineEnd,
-        /// 動かさない側の端点（スナップ基準点として使用）。
         fixed: Vec2,
         last_cursor: Vec2,
     },
@@ -97,15 +85,16 @@ struct Modifiers {
 }
 
 impl Modifiers {
-    fn read(keys: &ButtonInput<KeyCode>) -> Self {
+    fn read(keys: &ButtonInput<KeyCode>, state: &FractalState) -> Self {
         Self {
-            ctrl: keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight),
+            ctrl: keys.pressed(KeyCode::ControlLeft)
+                || keys.pressed(KeyCode::ControlRight)
+                || state.snap_grid,
             shift: keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight),
         }
     }
 }
 
-/// 修飾キーに応じてドラッグ終点をスナップし、対応するプレビュー色とともに返す。
 fn snap_endpoint(start: Vec2, raw_end: Vec2, modifiers: &Modifiers) -> (Vec2, Color) {
     if modifiers.ctrl {
         (snap_to_grid(raw_end), GRID_PREVIEW_COLOR)
@@ -126,24 +115,27 @@ fn snap_to_45(start: Vec2, end: Vec2) -> Vec2 {
     start + Vec2::new(snapped.cos(), snapped.sin()) * delta.length()
 }
 
-fn cursor_in_edit(window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
-    let cursor = window.cursor_position()?;
+/// スクリーン座標を Edit カメラのビューポートでクランプしてワールド座標へ変換する。
+fn world_pos_in_edit(screen: Vec2, window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
     if let Some(ref vp) = cam.viewport {
         let scale = window.scale_factor();
         let vp_min = vp.physical_position.as_vec2() / scale;
         let vp_size = vp.physical_size.as_vec2() / scale;
-        if cursor.x < vp_min.x
-            || cursor.y < vp_min.y
-            || cursor.x > vp_min.x + vp_size.x
-            || cursor.y > vp_min.y + vp_size.y
+        if screen.x < vp_min.x
+            || screen.y < vp_min.y
+            || screen.x > vp_min.x + vp_size.x
+            || screen.y > vp_min.y + vp_size.y
         {
             return None;
         }
     }
-    cam.viewport_to_world_2d(cam_tf, cursor).ok()
+    cam.viewport_to_world_2d(cam_tf, screen).ok()
 }
 
-/// 点と線分の最短距離を返す。
+fn cursor_in_edit(window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
+    world_pos_in_edit(window.cursor_position()?, window, cam, cam_tf)
+}
+
 fn point_to_segment_dist(p: Vec2, a: Vec2, b: Vec2) -> f32 {
     let ab = b - a;
     let len_sq = ab.length_squared();
@@ -154,15 +146,12 @@ fn point_to_segment_dist(p: Vec2, a: Vec2, b: Vec2) -> f32 {
     (p - (a + t * ab)).length()
 }
 
-/// cursor に最も近い（かつ LINE_HIT_DISTANCE 以内の）線のインデックスを返す。
-/// 描画順の逆（後から描かれた線を優先）で探す。
 fn find_line_at(cursor: Vec2, lines: &[Line]) -> Option<usize> {
     lines
         .iter()
         .enumerate()
         .rev()
         .find(|(_, l)| {
-            // 端点付近はヒット判定から除外（端点から新規線を描くためのクリックを妨げない）
             let near_endpoint = (cursor - l.a).length() < ENDPOINT_HIT_RADIUS
                 || (cursor - l.b).length() < ENDPOINT_HIT_RADIUS;
             !near_endpoint && point_to_segment_dist(cursor, l.a, l.b) < LINE_HIT_DISTANCE
@@ -193,20 +182,67 @@ fn handle_drag_input(
     mut undo_stack: ResMut<UndoStack>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
+    touches: Res<Touches>,
+    mut draw_touch_id: Local<Option<u64>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     edit_cam: Query<(&Camera, &GlobalTransform), With<EditCamera>>,
     mut contexts: EguiContexts,
 ) {
     let Ok(window) = windows.single() else { return; };
     let Ok((cam, cam_tf)) = edit_cam.single() else { return; };
-    let cursor = cursor_in_edit(window, cam, cam_tf);
-    let modifiers = Modifiers::read(&keys);
+    let modifiers = Modifiers::read(&keys, &state);
+
+    // === タッチ入力管理 ===
+    let touch_count = touches.iter().count();
+
+    // 2本指以上: 描画中のタッチをキャンセル
+    if touch_count >= 2 {
+        if draw_touch_id.is_some() {
+            *draw_touch_id = None;
+            if !matches!(*draw_state, DrawState::Idle | DrawState::Selected(_)) {
+                *draw_state = DrawState::Idle;
+            }
+        }
+    } else if draw_touch_id.is_none() {
+        // 新しい 1 本指タッチを追跡開始
+        if let Some(t) = touches.iter_just_pressed().next() {
+            *draw_touch_id = Some(t.id());
+        }
+    }
+
+    // タッチに基づく仮想マウス状態を計算
+    let (touch_just_pressed, touch_pressed, touch_just_released, touch_screen_pos): (bool, bool, bool, Option<Vec2>) =
+        if let Some(draw_id) = *draw_touch_id {
+            let active = touches.iter().find(|t| t.id() == draw_id);
+            let released = touches.iter_just_released().find(|t| t.id() == draw_id);
+            let just_pressed = touches.just_pressed(draw_id);
+            let just_released = released.is_some();
+            let screen_pos = active.map(|t| t.position())
+                .or_else(|| released.map(|t| t.position()));
+            if just_released {
+                *draw_touch_id = None;
+            }
+            (just_pressed, active.is_some(), just_released, screen_pos)
+        } else {
+            (false, false, false, None)
+        };
+
+    // タッチが有効なときはマウスを無視
+    let use_touch = touch_pressed || touch_just_pressed || touch_just_released;
+    let pressing = if use_touch { touch_pressed } else { buttons.pressed(MouseButton::Left) };
+    let just_pressing = if use_touch { touch_just_pressed } else { buttons.just_pressed(MouseButton::Left) };
+    let just_releasing = if use_touch { touch_just_released } else { buttons.just_released(MouseButton::Left) };
+
+    // カーソル位置: タッチ優先、なければマウス
+    let cursor: Option<Vec2> = touch_screen_pos
+        .or_else(|| window.cursor_position())
+        .and_then(|pos| world_pos_in_edit(pos, window, cam, cam_tf));
 
     let egui_ctx = contexts.ctx_mut();
     let egui_wants_pointer = egui_ctx.as_ref().map(|ctx| ctx.is_using_pointer()).unwrap_or(false);
     let egui_wants_keyboard = egui_ctx.map(|ctx| ctx.wants_keyboard_input()).unwrap_or(false);
 
-    // 選択インデックスが範囲外になっていたらリセット（Clear などによる削除対応）
+    // 選択インデックスが範囲外になっていたらリセット
     let n = state.base_shape.lines.len();
     let out_of_bounds = match *draw_state {
         DrawState::Selected(i)
@@ -219,13 +255,11 @@ fn handle_drag_input(
         return;
     }
 
-    // Escape: 選択解除
     if keys.just_pressed(KeyCode::Escape) {
         *draw_state = DrawState::Idle;
         return;
     }
 
-    // Delete / Backspace: 選択中の線を削除
     if !egui_wants_keyboard
         && (keys.just_pressed(KeyCode::Backspace) || keys.just_pressed(KeyCode::Delete))
         && let DrawState::Selected(idx) = *draw_state
@@ -237,7 +271,7 @@ fn handle_drag_input(
     }
 
     // pressed: ドラッグ中の位置更新
-    if buttons.pressed(MouseButton::Left) {
+    if pressing {
         match *draw_state {
             DrawState::DrawingLine { ref mut last_cursor, .. } => {
                 if let Some(pos) = cursor {
@@ -269,8 +303,8 @@ fn handle_drag_input(
         }
     }
 
-    // just_released: ドラッグ確定 / 状態遷移
-    if buttons.just_released(MouseButton::Left) {
+    // just_released: 確定
+    if just_releasing {
         match *draw_state {
             DrawState::DrawingLine { start, last_cursor } => {
                 let raw_end = cursor.unwrap_or(last_cursor);
@@ -291,10 +325,9 @@ fn handle_drag_input(
         }
     }
 
-    // just_pressed: 新しい操作を開始する（優先順位順）
-    if buttons.just_pressed(MouseButton::Left) && !egui_wants_pointer {
+    // just_pressed: 操作開始
+    if just_pressing && !egui_wants_pointer {
         if let Some(cursor_pos) = cursor {
-            // 優先度 1: 選択中の線の端点◯をヒット → 端点移動開始
             let endpoint_hit = if let DrawState::Selected(sel) = *draw_state {
                 state.base_shape.lines.get(sel).and_then(|line| {
                     if (cursor_pos - line.a).length() < ENDPOINT_HIT_RADIUS {
@@ -313,7 +346,6 @@ fn handle_drag_input(
                 undo_stack.push(state.clone());
                 *draw_state = DrawState::MovingEndpoint { idx, end, fixed, last_cursor: cursor_pos };
             } else if let Some(hit_idx) = find_line_at(cursor_pos, &state.base_shape.lines) {
-                // 優先度 2: 線本体をクリック → 選択 + 移動開始
                 let line = state.base_shape.lines[hit_idx];
                 undo_stack.push(state.clone());
                 *draw_state = DrawState::MovingLine {
@@ -323,7 +355,6 @@ fn handle_drag_input(
                     line_b_start: line.b,
                 };
             } else {
-                // 優先度 3: 空白をクリック → 選択解除 + 新規線描画開始
                 let start = if modifiers.ctrl { snap_to_grid(cursor_pos) } else { cursor_pos };
                 *draw_state = DrawState::DrawingLine { start, last_cursor: start };
             }
@@ -341,7 +372,7 @@ fn draw_canvas(
 ) {
     draw_confirmed_lines(&state, &draw_state, &mut gizmos);
 
-    let modifiers = Modifiers::read(&keys);
+    let modifiers = Modifiers::read(&keys, &state);
     let cursor = windows
         .single()
         .ok()
@@ -352,7 +383,6 @@ fn draw_canvas(
         draw_grid(&mut gizmos, cursor.map(snap_to_grid));
     }
 
-    // 新規線のドラッグプレビュー
     if let DrawState::DrawingLine { start, .. } = *draw_state
         && let Some(raw_end) = cursor
     {
@@ -360,7 +390,6 @@ fn draw_canvas(
         gizmos.line_2d(start, end, color);
     }
 
-    // 選択中の線の端点◯
     let selected_idx = match *draw_state {
         DrawState::Selected(i)
         | DrawState::MovingLine { idx: i, .. }
@@ -388,7 +417,6 @@ fn draw_confirmed_lines(state: &FractalState, draw_state: &DrawState, gizmos: &m
     }
 }
 
-/// 端点を示す小円を線分で近似して描画する。
 fn draw_endpoint_circle(gizmos: &mut Gizmos<EditGizmos>, center: Vec2) {
     const SEGMENTS: usize = 16;
     let step = std::f32::consts::TAU / SEGMENTS as f32;

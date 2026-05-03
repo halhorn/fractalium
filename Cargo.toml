@@ -3,6 +3,16 @@ name = "fractalium"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+webgl2 = ["bevy/webgl2"]
+
 [dependencies]
 bevy = "0.18"
 bevy_egui = "0.39"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
