@@ -51,8 +51,8 @@ Rust + Bevy（`../galaxy` で採用したゲームエンジン）を採用する
 - 言語: Rust (edition 2024)
 - エンジン: Bevy 0.18 系
 - 描画: Bevy 標準の 2D 描画 (Sprite / Mesh2d / Gizmos 等) を利用。MVP は 2D で十分
-- UI: Bevy の UI もしくは `bevy_egui` 等のエディタ向け UI クレート（操作部のパラメータ編集に利用）。具体クレートは Foundation F1 着手時に確定する
-- 配布: 当面はネイティブビルド。将来的に WebAssembly 化も Bevy で可能
+- UI: `bevy_egui` 0.39 を採用
+- 配布: ネイティブビルド（`cargo run`）と WebAssembly（`trunk serve` / GitHub Pages）の両方に対応済み。WASM ビルドは `trunk` + WebGL2 バックエンドで実現し、`https://halhorn.github.io/fractalium/` で公開中
 [/Answer]
 
 ### フラクタル数学モデル方針
