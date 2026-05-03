@@ -2,6 +2,8 @@
 
 インタラクティブ・フラクタル生成ツール。基本図形と複製ルールを対話的に編集することで、自己相似フラクタルをリアルタイムに生成・閲覧できる。
 
+**[▶ ブラウザで試す](https://halhorn.github.io/fractalium/)** — インストール不要。Mac / Windows / iOS / Android 対応。
+
 https://github.com/user-attachments/assets/72efb82c-006f-4da5-bf7b-f2ffbdc30293
 
 ## 必要環境
