@@ -285,6 +285,7 @@ fn global_controls_bar(
     undo_stack: &mut UndoStack,
     buttons: &ButtonInput<MouseButton>,
 ) {
+    ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         // Undo / Redo
         if ui.add_enabled(undo_stack.can_undo(), egui::Button::new("↩")).clicked() {
