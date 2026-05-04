@@ -1,9 +1,9 @@
 //! 右側のパラメータパネル（egui）と左側ペイン（Base Shape / Placement）の描画、
 //! および各カメラへのビューポート分配を提供するモジュール。
 //!
-//! 幅 700px 以上: 左サイドパネル (Edit + Placement) + 中央 Result + 右パラメータパネル
-//! 幅 700px 未満: 上部 Result + 中段グローバル操作バー + 下部 (Edit | Placement)
-//!               + Result 領域右上に Parameters（折りたたみ／展開時は Result 高さ全体）
+//! 幅 700px 以上: 左サイドパネル（タイトル + コントロールバー + Edit + Placement）+ 中央 Result + 右パラメータパネル
+//! 幅 700px 未満: 最上部タイトル + 中段 Result + グローバル操作バー + 下部 (Edit | Placement)
+//!               + Parameters（折りたたみ／展開時は Result と干渉しない下部パネル）
 
 use bevy::camera::Viewport;
 use bevy::prelude::*;
@@ -115,6 +115,12 @@ fn layout_wide(
         .frame(egui::Frame::default())
         .exact_width(left_panel_w)
         .show(ctx, |ui| {
+            app_title_panel_frame().show(ui, |ui| {
+                app_title_bar_contents(ui);
+            });
+            ui.separator();
+            global_controls_bar(ui, state, undo_stack, buttons);
+            ui.separator();
             let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
                 let can_del = !state.base_shape.lines.is_empty();
                 if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
@@ -171,6 +177,15 @@ fn layout_narrow(
     // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
     let panel_h = canvas_side + 52.0;
+
+    let title_resp = egui::TopBottomPanel::top("app_title")
+        .frame(app_title_panel_frame())
+        .default_height(40.0)
+        .min_height(34.0)
+        .max_height(52.0)
+        .show(ctx, |ui| {
+            app_title_bar_contents(ui);
+        });
 
     // 1. Params panel（最下部：折りたたみ時はタブ行、展開時は下から押し上げ）
     //    bottom パネルは先に定義したものが最下位に積まれる
@@ -249,9 +264,9 @@ fn layout_narrow(
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
 
-    // 4. Result: 残り領域（全幅）
+    // 4. Result: タイトルより下・グローバル操作バーより上（全幅）
     let result_rect = egui::Rect::from_min_max(
-        egui::pos2(0.0, 0.0),
+        egui::pos2(0.0, title_resp.response.rect.max.y),
         egui::pos2(win_w, global_resp.response.rect.min.y),
     );
 
@@ -259,6 +274,19 @@ fn layout_narrow(
 }
 
 // === 共通 UI パーツ ===
+
+fn app_title_panel_frame() -> egui::Frame {
+    egui::Frame::default()
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .fill(egui::Color32::from_rgb(26, 26, 34))
+        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(55, 55, 72)))
+}
+
+fn app_title_bar_contents(ui: &mut egui::Ui) {
+    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        ui.label(egui::RichText::new("Fractalium").heading().strong());
+    });
+}
 
 fn depth_slider_control(
     ui: &mut egui::Ui,
