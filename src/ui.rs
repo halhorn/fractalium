@@ -196,15 +196,11 @@ fn layout_narrow(
         params_panel.exact_height(panel_h)
     };
     params_panel.show(ctx, |ui| {
-        let chevron = if ui_layout.params_collapsed { "▲" } else { "▼" };
         let header_h = ui.spacing().interact_size.y.max(36.0);
         let header_clicked = ui
             .add_sized(
                 egui::vec2(ui.available_width(), header_h),
-                egui::Button::new(
-                    egui::RichText::new(format!("{chevron}  Parameters")).heading(),
-                )
-                .frame(false),
+                egui::Button::new(egui::RichText::new("Parameters").heading()).frame(false),
             )
             .clicked();
         if header_clicked {
