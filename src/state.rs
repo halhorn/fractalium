@@ -86,6 +86,14 @@ impl Replica {
             + self.translation
     }
 
+    /// `apply` の逆変換（ワールド座標を基図形空間へ）。
+    pub fn inverse_apply(&self, p: Vec2) -> Vec2 {
+        let q = p - self.translation;
+        let (sin, cos) = self.rotation.sin_cos();
+        let unrotated = Vec2::new(q.x * cos + q.y * sin, -q.x * sin + q.y * cos);
+        unrotated / self.scale
+    }
+
     /// 2 つの相似変換を合成する。
     /// 戻り値 `c` は `c.apply(p) == self.apply(other.apply(p))` を満たす。
     pub fn compose(self, other: Replica) -> Replica {

@@ -1,8 +1,8 @@
 //! Placement キャンバス（左下パネル）の描画とレプリカ操作インタラクションを提供するモジュール。
 //!
 //! - 基図形をゴースト表示、各レプリカを対応色で表示
-//! - クリックで選択（バウンディングボックス表示）
-//! - ドラッグで移動（枠内）・スケール（表示枠エッジ）・回転（枠外）
+//! - クリックで選択（レプリカ座標系に沿った外枠表示）
+//! - ドラッグで移動（枠内）・スケール（表示枠の四隅付近）・回転（枠外）
 //! - Ctrl: グリッドドット表示 + スナップ（移動: 細かいグリッド, スケール: 0.05, 回転: 15°）
 //! - 右クリックで削除
 //! - Ctrl+C / Ctrl+V でレプリカのコピペ
@@ -28,8 +28,6 @@ use crate::PlacementCamera;
 
 const GHOST_ALPHA: f32 = 0.20;
 const REPLICA_ALPHA: f32 = 0.85;
-/// 表示上の枠線のエッジ帯幅（この幅でスケール操作）。タッチ向けに広め（全レイアウト共通）。
-const EDGE_WIDTH: f32 = 0.1;
 const GIZMO_LINE_WIDTH_PX: f32 = 3.25;
 /// クリックヒットテスト用マージン（表示 AABB をこの分だけ広げてヒット判定）。
 const CLICK_MARGIN: f32 = 0.03;
@@ -40,6 +38,9 @@ const DISPLAY_MARGIN: f32 = 0.05;
 const SELECTION_COLOR: Color = Color::srgba(1.0, 1.0, 0.4, 0.9);
 const PIVOT_COLOR: Color = Color::srgba(1.0, 1.0, 0.4, 0.35);
 const HANDLE_HALF: f32 = 0.022;
+/// スケール操作に反応する範囲：外枠の各頂点からの距離がこれ以下ならドラッグでスケール（キャンバス正規化座標）。
+/// コーナーハンドル表示とつかみやすさを揃える。
+const CORNER_SCALE_RADIUS: f32 = HANDLE_HALF * 3.0;
 const PIVOT_ARM: f32 = 0.06;
 /// RotatePending → Rotate に昇格する最小移動距離²（これ未満は単発クリックと判定）。
 const ROTATE_START_THRESHOLD_SQ: f32 = 0.015 * 0.015;
@@ -101,27 +102,18 @@ impl Aabb {
     fn expanded(self, margin: f32) -> Self {
         Self { min: self.min - Vec2::splat(margin), max: self.max + Vec2::splat(margin) }
     }
-
-    /// 表示 AABB のエッジ帯（外辺から内側 EDGE_WIDTH 幅）にあれば true。
-    fn on_edge(self, p: Vec2) -> bool {
-        let inner = Self {
-            min: self.min + Vec2::splat(EDGE_WIDTH),
-            max: self.max - Vec2::splat(EDGE_WIDTH),
-        };
-        self.contains(p) && !inner.contains(p)
-    }
 }
 
-/// レプリカのジオメトリ AABB（生の図形から計算）。
-fn replica_aabb(replica: &Replica, lines: &[Line]) -> Aabb {
+/// 基図形空間でのジオメトリ AABB（レプリカ適用前）。
+fn base_shape_aabb(lines: &[Line]) -> Aabb {
     if lines.is_empty() {
-        let c = replica.translation;
-        return Aabb { min: c - Vec2::splat(DEFAULT_AABB_HALF), max: c + Vec2::splat(DEFAULT_AABB_HALF) };
+        let h = DEFAULT_AABB_HALF;
+        return Aabb { min: Vec2::splat(-h), max: Vec2::splat(h) };
     }
     let mut min = Vec2::splat(f32::MAX);
     let mut max = Vec2::splat(f32::MIN);
     for line in lines {
-        for p in [replica.apply(line.a), replica.apply(line.b)] {
+        for p in [line.a, line.b] {
             min = min.min(p);
             max = max.max(p);
         }
@@ -131,9 +123,40 @@ fn replica_aabb(replica: &Replica, lines: &[Line]) -> Aabb {
     Aabb { min: center - half, max: center + half }
 }
 
-/// ユーザーに見える表示 AABB（生 AABB を DISPLAY_MARGIN だけ拡張）。
-fn display_aabb(replica: &Replica, lines: &[Line]) -> Aabb {
-    replica_aabb(replica, lines).expanded(DISPLAY_MARGIN)
+/// 基図形空間での表示用 AABB（マージン付き）。レプリカと同じ向きの外枠のローカル定義。
+fn base_display_aabb(lines: &[Line]) -> Aabb {
+    base_shape_aabb(lines).expanded(DISPLAY_MARGIN)
+}
+
+/// 表示外枠の中心をワールド座標で返す（スケール・回転のピボット）。
+fn display_frame_center_world(replica: &Replica, lines: &[Line]) -> Vec2 {
+    replica.apply(base_display_aabb(lines).center())
+}
+
+/// ワールド点が表示外枠（レプリカ座標系に固まった矩形）内か。`margin` は基図形空間で広げる。
+fn display_frame_contains_world(replica: &Replica, lines: &[Line], world: Vec2, margin: f32) -> bool {
+    let local = replica.inverse_apply(world);
+    base_display_aabb(lines).expanded(margin).contains(local)
+}
+
+/// 表示外枠の四隅いずれかから `CORNER_SCALE_RADIUS` 以内ならスケール操作対象。
+fn display_frame_near_corner_world(replica: &Replica, lines: &[Line], world: Vec2) -> bool {
+    let r_sq = CORNER_SCALE_RADIUS * CORNER_SCALE_RADIUS;
+    oriented_display_corners(replica, lines)
+        .into_iter()
+        .any(|c| (c - world).length_squared() <= r_sq)
+}
+
+fn oriented_display_corners(replica: &Replica, lines: &[Line]) -> [Vec2; 4] {
+    let a = base_display_aabb(lines);
+    let mn = a.min;
+    let mx = a.max;
+    [
+        replica.apply(Vec2::new(mn.x, mn.y)),
+        replica.apply(Vec2::new(mx.x, mn.y)),
+        replica.apply(Vec2::new(mx.x, mx.y)),
+        replica.apply(Vec2::new(mn.x, mx.y)),
+    ]
 }
 
 // === カーソル変換 ===
@@ -318,9 +341,7 @@ fn handle_placement_input(
         if let Some(pos) = cursor {
             // クリック位置のレプリカを探す
             let hit = state.replicas.iter().enumerate().rev().find(|(_, r)| {
-                display_aabb(r, &state.base_shape.lines)
-                    .expanded(CLICK_MARGIN)
-                    .contains(pos)
+                display_frame_contains_world(r, &state.base_shape.lines, pos, CLICK_MARGIN)
             }).map(|(i, _)| i);
 
             if let Some(i) = hit {
@@ -339,7 +360,7 @@ fn handle_placement_input(
 }
 
 /// マウス押下時のドラッグ開始判定。
-/// スケール判定は表示 AABB のエッジに基づく（見えている枠線でのみスケール）。
+/// スケール判定は表示外枠の四隅から一定距離以内に限定する。
 fn start_drag(
     cursor_pos: Vec2,
     state: &mut FractalState,
@@ -349,8 +370,7 @@ fn start_drag(
     // 選択中レプリカを最優先でヒットテスト（枠線ドラッグを他のオブジェクトに奪われないため）
     let selected_hit = placement.selected.and_then(|sel| {
         let r = state.replicas.get(sel)?;
-        let daabb = display_aabb(r, &state.base_shape.lines);
-        daabb.expanded(CLICK_MARGIN).contains(cursor_pos).then_some((sel, daabb))
+        display_frame_contains_world(r, &state.base_shape.lines, cursor_pos, CLICK_MARGIN).then_some(sel)
     });
 
     // 選択中がヒットしない場合のみ他のレプリカを検索（描画順の逆＝手前優先）
@@ -358,18 +378,18 @@ fn start_drag(
         state.replicas.iter().enumerate().rev()
             .find(|(i, r)| {
                 Some(*i) != placement.selected
-                    && display_aabb(r, &state.base_shape.lines)
-                        .expanded(CLICK_MARGIN)
-                        .contains(cursor_pos)
+                    && display_frame_contains_world(r, &state.base_shape.lines, cursor_pos, CLICK_MARGIN)
             })
-            .map(|(i, r)| (i, display_aabb(r, &state.base_shape.lines)))
+            .map(|(i, _)| i)
     });
 
-    if let Some((i, daabb)) = clicked {
+    if let Some(i) = clicked {
         placement.selected = Some(i);
-        let drag = if daabb.on_edge(cursor_pos) {
-            // 表示枠のエッジ → スケール
-            let pivot = daabb.center();
+        let r = &state.replicas[i];
+        let lines = &state.base_shape.lines;
+        let drag = if display_frame_near_corner_world(r, lines, cursor_pos) {
+            // 表示枠の四隅付近 → スケール
+            let pivot = display_frame_center_world(r, lines);
             PlacementDrag::Scale {
                 pivot,
                 start_cursor_dist: (cursor_pos - pivot).length().max(1e-4),
@@ -387,7 +407,7 @@ fn start_drag(
     } else if let Some(sel) = placement.selected {
         // 全レプリカ外 → 回転待機（単発クリックなら選択解除、ドラッグなら回転）
         if sel < state.replicas.len() {
-            let pivot = display_aabb(&state.replicas[sel], &state.base_shape.lines).center();
+            let pivot = display_frame_center_world(&state.replicas[sel], &state.base_shape.lines);
             let d = cursor_pos - pivot;
             placement.drag = PlacementDrag::RotatePending {
                 pivot,
@@ -440,7 +460,7 @@ fn angle_diff(a: f32, b: f32) -> f32 {
 
 // === カーソルアイコン更新 ===
 
-/// 表示枠エッジにポインタが当たったときにカーソルアイコンを変える。
+/// 表示枠の四隅付近にポインタが当たったときにカーソルアイコンを変える。
 fn update_placement_cursor(
     mut commands: Commands,
     state: Res<FractalState>,
@@ -452,13 +472,13 @@ fn update_placement_cursor(
     let Ok((cam, cam_tf)) = placement_cam.single() else { return; };
     let cursor = cursor_in_placement(window, cam, cam_tf);
 
-    let on_edge = placement.selected
+    let on_corner = placement.selected
         .and_then(|sel| state.replicas.get(sel))
         .is_some_and(|r| {
-            cursor.is_some_and(|pos| display_aabb(r, &state.base_shape.lines).on_edge(pos))
+            cursor.is_some_and(|pos| display_frame_near_corner_world(r, &state.base_shape.lines, pos))
         });
 
-    if on_edge {
+    if on_corner {
         commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::NwseResize));
     } else {
         commands.entity(window_entity).remove::<CursorIcon>();
@@ -510,12 +530,13 @@ fn draw_selection_box(
 ) {
     let Some(sel) = placement.selected else { return; };
     let Some(replica) = state.replicas.get(sel) else { return; };
-    let daabb = display_aabb(replica, &state.base_shape.lines);
-
-    draw_rect(&mut gizmos, daabb.min, daabb.max, SELECTION_COLOR);
+    let corners = oriented_display_corners(replica, &state.base_shape.lines);
+    for k in 0..4 {
+        gizmos.line_2d(corners[k], corners[(k + 1) % 4], SELECTION_COLOR);
+    }
 
     // コーナーハンドル
-    for corner in [daabb.min, Vec2::new(daabb.max.x, daabb.min.y), daabb.max, Vec2::new(daabb.min.x, daabb.max.y)] {
+    for corner in corners {
         let h = HANDLE_HALF;
         draw_rect(&mut gizmos, corner - Vec2::splat(h), corner + Vec2::splat(h), SELECTION_COLOR);
     }
@@ -553,10 +574,9 @@ fn placement_overlay_ui(
     let Ok((cam, cam_tf)) = placement_cam.single() else { return Ok(()); };
 
     let scale = window.scale_factor();
-    let daabb = display_aabb(replica, &state.base_shape.lines);
-
-    // 表示枠の右上コーナー（ワールド座標: max.x, max.y は Y 上向きなのでスクリーンでは上になる）
-    let Some(btn_pos) = world_to_egui_pos(Vec2::new(daabb.max.x, daabb.max.y), cam, cam_tf, scale)
+    // 基図形ローカル (max x, max y) をワールドへ（レプリカと同じ向きの外枠の「右上」）
+    let corners = oriented_display_corners(replica, &state.base_shape.lines);
+    let Some(btn_pos) = world_to_egui_pos(corners[2], cam, cam_tf, scale)
     else {
         return Ok(());
     };
