@@ -217,7 +217,7 @@ fn layout_narrow(
     let global_resp = egui::TopBottomPanel::bottom("global_controls")
         .exact_height(36.0)
         .show(ctx, |ui| {
-            global_controls_bar(ui, state, undo_stack);
+            global_controls_bar(ui, state, undo_stack, buttons);
         });
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
@@ -241,11 +241,25 @@ fn layout_narrow(
 
 // === 共通 UI パーツ ===
 
+fn depth_slider_control(
+    ui: &mut egui::Ui,
+    state: &mut FractalState,
+    buttons: &ButtonInput<MouseButton>,
+) {
+    let mut depth = state.depth;
+    let depth_resp = ui.add(egui::Slider::new(&mut depth, 1..=12).text("Depth"));
+    let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);
+    if depth_resp.changed() && !egui_stuck {
+        state.depth = depth;
+    }
+}
+
 /// undo / redo / snap / depth / gen を横一列に並べた操作バー。
 fn global_controls_bar(
     ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
+    buttons: &ButtonInput<MouseButton>,
 ) {
     ui.horizontal(|ui| {
         // Undo / Redo
@@ -271,15 +285,7 @@ fn global_controls_bar(
         }
         ui.separator();
 
-        // Depth
-        ui.label("D");
-        if ui.small_button("−").clicked() && state.depth > 1 {
-            state.depth -= 1;
-        }
-        ui.label(format!("{}", state.depth));
-        if ui.small_button("+").clicked() && state.depth < 12 {
-            state.depth += 1;
-        }
+        depth_slider_control(ui, state, buttons);
         ui.separator();
 
         // Show all generations
@@ -401,12 +407,7 @@ fn draw_params_controls(
     placement: &mut PlacementState,
     buttons: &ButtonInput<MouseButton>,
 ) {
-    let mut depth = state.depth;
-    let depth_resp = ui.add(egui::Slider::new(&mut depth, 1..=12).text("Depth"));
-    let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);
-    if depth_resp.changed() && !egui_stuck {
-        state.depth = depth;
-    }
+    depth_slider_control(ui, state, buttons);
 
     ui.checkbox(&mut state.show_all_generations, "Show all generations");
     ui.separator();
