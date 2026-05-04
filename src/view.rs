@@ -433,8 +433,9 @@ fn pan_result(
 }
 
 /// ダブルタップ後に上下ドラッグでズームするジェスチャーを処理する。
-/// - 上ドラッグ: ズームイン（スケール減少）
-/// - 下ドラッグ: ズームアウト（スケール増大）
+/// - 上ドラッグ: ズームアウト（画面上は小さく見える）
+/// - 下ドラッグ: ズームイン
+/// Placement でレプリカ選択中も、カメラと同じ見た目になるようレプリカ倍率には `zoom_factor` の逆数を掛ける。
 #[allow(clippy::too_many_arguments)]
 fn handle_double_tap_zoom(
     time: Res<Time>,
@@ -484,7 +485,7 @@ fn handle_double_tap_zoom(
         if let Some(touch) = touches.iter().find(|t| t.id() == id) {
             let curr_y = touch.position().y;
             let delta_y = curr_y - dtap_state.last_y;
-            let zoom_factor = (1.0 + delta_y * DOUBLE_TAP_ZOOM_SPEED).max(0.01);
+            let zoom_factor = (1.0 - delta_y * DOUBLE_TAP_ZOOM_SPEED).max(0.01);
 
             match dtap_state.active_target {
                 PinchTarget::Edit => {
@@ -495,7 +496,9 @@ fn handle_double_tap_zoom(
                 PinchTarget::Placement => {
                     if let Some(sel) = placement.selected.filter(|&i| i < state.replicas.len()) {
                         if let Some(replica) = state.replicas.get_mut(sel) {
-                            apply_replica_scale_factor(replica, zoom_factor);
+                            // カメラは ortho.scale *= zoom_factor。レプリカは同じジェスチャで見た目を揃えるため逆数を掛ける。
+                            let replica_factor = 1.0 / zoom_factor;
+                            apply_replica_scale_factor(replica, replica_factor);
                         }
                     } else if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
                         apply_pinch_at_world_origin(&mut proj, &mut transform, zoom_factor);
