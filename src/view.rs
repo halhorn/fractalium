@@ -147,7 +147,7 @@ fn zoom_canvas<C: Component + ZoomTowardsCursor>(
     ortho.scale = new_scale;
 }
 
-/// ピンチ量をカメラに適用する。
+/// ピンチ量をカメラに適用する（スクリーン上の点をズームの中心に固定する）。
 fn apply_pinch_to_cam(
     cam: &Camera,
     cam_tf: &GlobalTransform,
@@ -165,6 +165,21 @@ fn apply_pinch_to_cam(
         transform.translation.x += (mid_world.x - transform.translation.x) * (1.0 - scale_ratio);
         transform.translation.y += (mid_world.y - transform.translation.y) * (1.0 - scale_ratio);
     }
+    ortho.scale = new_scale;
+}
+
+/// ワールド原点をズームの中心に固定してスケールを適用する（`zoom_canvas` の非カーソル分岐と同じ）。
+fn apply_pinch_at_world_origin(
+    proj: &mut Projection,
+    transform: &mut Transform,
+    scale_factor: f32,
+) {
+    let Projection::Orthographic(ref mut ortho) = *proj else { return; };
+    let old_scale = ortho.scale;
+    let new_scale = (old_scale * scale_factor).clamp(ZOOM_MIN, ZOOM_MAX);
+    let scale_ratio = new_scale / old_scale;
+    transform.translation.x *= scale_ratio;
+    transform.translation.y *= scale_ratio;
     ortho.scale = new_scale;
 }
 
@@ -215,13 +230,13 @@ fn handle_pinch_zoom(
         let scale_factor = pinch.prev_distance / distance;
         match pinch.target {
             PinchTarget::Edit => {
-                if let Ok((cam, cam_tf, mut proj, mut transform)) = edit_cam_q.single_mut() {
-                    apply_pinch_to_cam(cam, cam_tf, &mut proj, &mut transform, midpoint, scale_factor);
+                if let Ok((_, _, mut proj, mut transform)) = edit_cam_q.single_mut() {
+                    apply_pinch_at_world_origin(&mut proj, &mut transform, scale_factor);
                 }
             }
             PinchTarget::Placement => {
-                if let Ok((cam, cam_tf, mut proj, mut transform)) = placement_cam_q.single_mut() {
-                    apply_pinch_to_cam(cam, cam_tf, &mut proj, &mut transform, midpoint, scale_factor);
+                if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
+                    apply_pinch_at_world_origin(&mut proj, &mut transform, scale_factor);
                 }
             }
             PinchTarget::Result => {
@@ -383,13 +398,13 @@ fn handle_double_tap_zoom(
 
             match dtap_state.active_target {
                 PinchTarget::Edit => {
-                    if let Ok((cam, cam_tf, mut proj, mut transform)) = edit_cam_q.single_mut() {
-                        apply_pinch_to_cam(cam, cam_tf, &mut proj, &mut transform, touch.position(), zoom_factor);
+                    if let Ok((_, _, mut proj, mut transform)) = edit_cam_q.single_mut() {
+                        apply_pinch_at_world_origin(&mut proj, &mut transform, zoom_factor);
                     }
                 }
                 PinchTarget::Placement => {
-                    if let Ok((cam, cam_tf, mut proj, mut transform)) = placement_cam_q.single_mut() {
-                        apply_pinch_to_cam(cam, cam_tf, &mut proj, &mut transform, touch.position(), zoom_factor);
+                    if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
+                        apply_pinch_at_world_origin(&mut proj, &mut transform, zoom_factor);
                     }
                 }
                 PinchTarget::Result => {
