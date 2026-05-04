@@ -23,9 +23,11 @@ const PREVIEW_COLOR: Color = Color::srgb(1.0, 0.8, 0.4);
 const SNAP_PREVIEW_COLOR: Color = Color::srgb(0.4, 1.0, 0.6);
 const GRID_PREVIEW_COLOR: Color = Color::srgb(0.4, 0.8, 1.0);
 const ENDPOINT_COLOR: Color = Color::srgba(1.0, 1.0, 0.45, 0.9);
-const ENDPOINT_RADIUS: f32 = 0.035;
-const ENDPOINT_HIT_RADIUS: f32 = 0.07;
-const LINE_HIT_DISTANCE: f32 = 0.05;
+/// タッチ含め操作しやすいよう従来値より広めにとる（ワイド／ナロー共通）。
+const ENDPOINT_RADIUS: f32 = 0.048;
+const ENDPOINT_HIT_RADIUS: f32 = 0.097;
+const LINE_HIT_DISTANCE: f32 = 0.07;
+const GIZMO_LINE_WIDTH_PX: f32 = 3.25;
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct EditGizmos;
@@ -67,7 +69,7 @@ impl Plugin for EditPlugin {
             render_layers: edit_layer(),
             ..Default::default()
         };
-        config.line.width = 2.0;
+        config.line.width = GIZMO_LINE_WIDTH_PX;
 
         app.init_resource::<DrawState>()
             .init_resource::<UndoStack>()
