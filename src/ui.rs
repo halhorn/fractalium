@@ -1,8 +1,10 @@
 //! 右側のパラメータパネル（egui）と左側ペイン（Base Shape / Placement）の描画、
 //! および各カメラへのビューポート分配を提供するモジュール。
 //!
-//! 幅 700px 以上: 左サイドパネル（タイトル + コントロールバー + Edit + Placement）+ 中央 Result + 右パラメータパネル
-//! 幅 700px 未満: 最上部タイトル + 中段 Result + グローバル操作バー + 下部 (Edit | Placement)
+//! 幅 700px 以上: 左サイドパネル（Undo/Snap を含む操作バー + Edit + Placement）+ 中央 Result + 右パラメータパネル。
+//! Result ウィンドウ右下に Depth（スライダー＋数値）と Show generations のトグルボタンがある。
+//! 幅 700px 未満: 最上部タイトル + 中段 Result（Depth / Show generations は Result 右下に重ね表示）
+//!               + Undo/Snap グローバル操作バー + 下部 (Edit | Placement)
 //!               + Parameters（折りたたみ／展開時は Result と干渉しない下部パネル）
 
 use bevy::camera::Viewport;
@@ -75,7 +77,6 @@ fn params_panel(
             &mut undo_stack,
             &mut placement,
             &mut ui_layout,
-            &buttons,
         )
     } else {
         layout_wide(
@@ -87,9 +88,10 @@ fn params_panel(
             &mut undo_stack,
             &mut placement,
             &mut ui_layout,
-            &buttons,
         )
     };
+
+    paint_result_corner_controls(ctx, result_egui_rect, &mut *state, &buttons);
 
     if let Ok(mut cam) = edit_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
@@ -120,7 +122,6 @@ fn layout_wide(
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
-    buttons: &ButtonInput<MouseButton>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
     let params_w = if ui_layout.params_collapsed { 28.0_f32 } else { 240.0_f32 };
@@ -143,7 +144,7 @@ fn layout_wide(
                 app_title_bar_contents(ui);
             });
             ui.separator();
-            global_controls_bar(ui, state, undo_stack, buttons);
+            global_controls_bar(ui, state, undo_stack);
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
                 let can_del = matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
@@ -203,7 +204,6 @@ fn layout_narrow(
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
-    buttons: &ButtonInput<MouseButton>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
@@ -298,7 +298,7 @@ fn layout_narrow(
         .default_height(40.0)
         .max_height(108.0)
         .show(ctx, |ui| {
-            global_controls_bar(ui, state, undo_stack, buttons);
+            global_controls_bar(ui, state, undo_stack);
         });
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
@@ -327,30 +327,68 @@ fn app_title_bar_contents(ui: &mut egui::Ui) {
     });
 }
 
-fn depth_slider_control(
-    ui: &mut egui::Ui,
+/// Result の右下へ重ねる Depth（スライダー＋数値）と「Show generations」トグル（Snap と同種のボタン）。
+fn paint_result_corner_controls(
+    ctx: &egui::Context,
+    result_rect: egui::Rect,
     state: &mut FractalState,
     buttons: &ButtonInput<MouseButton>,
 ) {
-    let mut depth = state.depth;
-    let h = ui.spacing().interact_size.y;
-    let slider_w = (ui.available_width() - 4.0).clamp(40.0, 220.0);
-    let depth_resp = ui.add_sized(
-        egui::vec2(slider_w, h),
-        egui::Slider::new(&mut depth, 1..=12).text("Depth"),
-    );
-    let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);
-    if depth_resp.changed() && !egui_stuck {
-        state.depth = depth;
+    if result_rect.width() < 1.0 || result_rect.height() < 1.0 {
+        return;
     }
+
+    let pad = egui::vec2(14.0, 12.0);
+    let pivot_pos = result_rect.max - pad;
+
+    egui::Area::new(egui::Id::new("result_depth_generations_corner"))
+        .order(egui::Order::Middle)
+        .constrain_to(result_rect)
+        .pivot(egui::Align2::RIGHT_BOTTOM)
+        .current_pos(pivot_pos)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    ui.label(egui::RichText::new("Depth").small());
+
+                    let h = ui.spacing().interact_size.y;
+                    let reserve_other = 200.0;
+                    let slider_w = (result_rect.width() - pad.x * 2.0 - reserve_other)
+                        .clamp(72.0, 200.0)
+                        .min(ui.available_width().max(72.0));
+
+                    let mut depth = state.depth;
+                    let slider_r = ui.add_sized(
+                        egui::vec2(slider_w, h),
+                        egui::Slider::new(&mut depth, 1..=12).show_value(false),
+                    );
+                    let dv_r =
+                        ui.add(egui::DragValue::new(&mut depth).range(1..=12).speed(1.0));
+
+                    let stuck =
+                        (slider_r.dragged() || dv_r.dragged()) && !buttons.pressed(MouseButton::Left);
+                    if depth != state.depth && !stuck {
+                        state.depth = depth;
+                    }
+
+                    let mut gen_btn = egui::Button::new("Show generations");
+                    if state.show_all_generations {
+                        gen_btn = gen_btn.fill(egui::Color32::from_rgb(60, 120, 60));
+                    }
+                    if ui.add(gen_btn).clicked() {
+                        state.show_all_generations = !state.show_all_generations;
+                    }
+                });
+            });
+        });
 }
 
-/// undo / redo / snap / depth / gen を並べた操作バー（狭い幅では折り返し）。
+/// undo / redo / snap を並べた操作バー（狭い幅では折り返し）。Depth / generations は Result 右下へ表示。
 fn global_controls_bar(
     ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
-    buttons: &ButtonInput<MouseButton>,
 ) {
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
@@ -374,19 +412,6 @@ fn global_controls_bar(
         }
         if ui.add(snap_btn).clicked() {
             state.snap_grid = !state.snap_grid;
-        }
-        ui.add_space(6.0);
-
-        depth_slider_control(ui, state, buttons);
-        ui.add_space(6.0);
-
-        // Show all generations
-        let mut gen_btn = egui::Button::new("Gen");
-        if state.show_all_generations {
-            gen_btn = gen_btn.fill(egui::Color32::from_rgb(60, 60, 120));
-        }
-        if ui.add(gen_btn).clicked() {
-            state.show_all_generations = !state.show_all_generations;
         }
     });
 }
