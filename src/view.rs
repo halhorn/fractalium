@@ -6,16 +6,17 @@ use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::state::DoubleTapZoomActive;
+use crate::state::{
+    DoubleTapZoomActive, FractalState, PlacementState, Replica, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+};
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
 /// ズーム時にカーソル位置を中心にする（true）か原点固定にする（false）か。
 trait ZoomTowardsCursor {
     const ZOOM_TOWARDS_CURSOR: bool;
 }
-impl ZoomTowardsCursor for EditCamera     { const ZOOM_TOWARDS_CURSOR: bool = false; }
-impl ZoomTowardsCursor for PlacementCamera { const ZOOM_TOWARDS_CURSOR: bool = false; }
-impl ZoomTowardsCursor for ResultCamera   { const ZOOM_TOWARDS_CURSOR: bool = true; }
+impl ZoomTowardsCursor for EditCamera   { const ZOOM_TOWARDS_CURSOR: bool = false; }
+impl ZoomTowardsCursor for ResultCamera { const ZOOM_TOWARDS_CURSOR: bool = true; }
 
 const ZOOM_SPEED: f32 = 0.02;
 const ZOOM_MIN: f32 = 0.005;
@@ -77,7 +78,7 @@ impl Plugin for ViewPlugin {
                 Update,
                 (
                     zoom_canvas::<EditCamera>,
-                    zoom_canvas::<PlacementCamera>,
+                    zoom_placement_canvas,
                     zoom_canvas::<ResultCamera>,
                     handle_pinch_zoom,
                     handle_double_tap_zoom.after(handle_pinch_zoom),
@@ -105,6 +106,49 @@ fn pos_in_viewport(pos: Vec2, window: &Window, cam: &Camera) -> bool {
 /// カーソルが指定カメラのビューポート内にあるか返す。
 fn cursor_in_viewport(window: &Window, cam: &Camera) -> bool {
     window.cursor_position().is_some_and(|pos| pos_in_viewport(pos, window, cam))
+}
+
+fn apply_replica_scale_factor(replica: &mut Replica, factor: f32) {
+    replica.scale = (replica.scale * factor).clamp(REPLICA_SCALE_MIN, REPLICA_SCALE_MAX);
+}
+
+/// Placement パネル: レプリカ選択中はホイールでカメラではなく選択レプリカのスケールを変える。
+fn zoom_placement_canvas(
+    scroll: Res<AccumulatedMouseScroll>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    placement: Res<PlacementState>,
+    mut state: ResMut<FractalState>,
+    mut cam_q: Query<(&Camera, &GlobalTransform, &mut Projection, &mut Transform), With<PlacementCamera>>,
+) {
+    let total = scroll.delta.y;
+    if total == 0.0 {
+        return;
+    }
+    let Ok(window) = windows.single() else { return; };
+    let Ok((cam, _, mut proj, mut transform)) = cam_q.single_mut() else { return; };
+
+    if !cursor_in_viewport(window, cam) {
+        return;
+    }
+
+    let Projection::Orthographic(ref mut ortho) = *proj else { return; };
+
+    let old_scale = ortho.scale;
+    let new_scale = (old_scale * (1.0 - total * ZOOM_SPEED)).clamp(ZOOM_MIN, ZOOM_MAX);
+    let scale_ratio = new_scale / old_scale;
+
+    if let Some(sel) = placement.selected {
+        if sel < state.replicas.len() {
+            if let Some(replica) = state.replicas.get_mut(sel) {
+                apply_replica_scale_factor(replica, scale_ratio);
+            }
+            return;
+        }
+    }
+
+    transform.translation.x *= scale_ratio;
+    transform.translation.y *= scale_ratio;
+    ortho.scale = new_scale;
 }
 
 /// マウスホイールで任意キャンバスをズームするジェネリックシステム。
@@ -188,6 +232,8 @@ fn handle_pinch_zoom(
     touches: Res<Touches>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut pinch: ResMut<PinchState>,
+    placement: Res<PlacementState>,
+    mut state: ResMut<FractalState>,
     mut edit_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -235,7 +281,11 @@ fn handle_pinch_zoom(
                 }
             }
             PinchTarget::Placement => {
-                if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
+                if let Some(sel) = placement.selected.filter(|&i| i < state.replicas.len()) {
+                    if let Some(replica) = state.replicas.get_mut(sel) {
+                        apply_replica_scale_factor(replica, scale_factor);
+                    }
+                } else if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
                     apply_pinch_at_world_origin(&mut proj, &mut transform, scale_factor);
                 }
             }
@@ -356,6 +406,8 @@ fn handle_double_tap_zoom(
     mut dtap_state: ResMut<DoubleTapZoomState>,
     mut dtap_active: ResMut<DoubleTapZoomActive>,
     pinch: Res<PinchState>,
+    placement: Res<PlacementState>,
+    mut state: ResMut<FractalState>,
     mut edit_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -403,7 +455,11 @@ fn handle_double_tap_zoom(
                     }
                 }
                 PinchTarget::Placement => {
-                    if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
+                    if let Some(sel) = placement.selected.filter(|&i| i < state.replicas.len()) {
+                        if let Some(replica) = state.replicas.get_mut(sel) {
+                            apply_replica_scale_factor(replica, zoom_factor);
+                        }
+                    } else if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
                         apply_pinch_at_world_origin(&mut proj, &mut transform, zoom_factor);
                     }
                 }

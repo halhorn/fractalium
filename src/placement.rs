@@ -18,7 +18,10 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::fractal::result_replica_color;
 use crate::grid::{draw_fine_grid, snap_to_fine_grid};
 use crate::placement_layer;
-use crate::state::{CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState, Replica, UndoStack};
+use crate::state::{
+    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState, Replica,
+    UndoStack, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+};
 use crate::PlacementCamera;
 
 // === 定数 ===
@@ -412,7 +415,7 @@ fn apply_drag(cursor_pos: Vec2, ctrl: bool, state: &mut FractalState, placement:
                 (raw_scale / 0.05).round() * 0.05
             } else {
                 raw_scale
-            }.clamp(0.05, 2.0);
+            }.clamp(REPLICA_SCALE_MIN, REPLICA_SCALE_MAX);
         }
         PlacementDrag::Rotate { pivot, start_angle, start_rotation } => {
             let d = cursor_pos - pivot;

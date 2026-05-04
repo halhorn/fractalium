@@ -43,6 +43,10 @@ pub struct Line {
     pub b: Vec2,
 }
 
+/// レプリカの一様スケールの下限・上限（UI・ドラッグ・ビューのズームで共通）。
+pub const REPLICA_SCALE_MIN: f32 = 0.05;
+pub const REPLICA_SCALE_MAX: f32 = 2.0;
+
 /// 1 つの複製を表す相似変換（平行移動・回転・一様スケール）。
 /// 適用順は scale → rotate → translate。
 #[derive(Clone, Copy)]

@@ -11,7 +11,10 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::fractal::result_replica_color;
-use crate::state::{CanvasLayout, FractalState, PlacementState, Replica, UiLayout, UndoStack};
+use crate::state::{
+    CanvasLayout, FractalState, PlacementState, Replica, UiLayout, UndoStack, REPLICA_SCALE_MAX,
+    REPLICA_SCALE_MIN,
+};
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
 pub struct UiPlugin;
@@ -496,6 +499,10 @@ fn rotation_row(ui: &mut egui::Ui, rotation: &mut f32) {
 fn scale_row(ui: &mut egui::Ui, scale: &mut f32) {
     ui.horizontal(|ui| {
         ui.label("Scale");
-        ui.add(egui::DragValue::new(scale).speed(0.005).range(0.05..=2.0));
+        ui.add(
+            egui::DragValue::new(scale)
+                .speed(0.005)
+                .range(REPLICA_SCALE_MIN..=REPLICA_SCALE_MAX),
+        );
     });
 }
