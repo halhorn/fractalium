@@ -196,16 +196,22 @@ fn layout_narrow(
         params_panel.exact_height(panel_h)
     };
     params_panel.show(ctx, |ui| {
-        if ui_layout.params_collapsed {
-            ui.horizontal(|ui| {
-                if ui.button("▲").clicked() { ui_layout.params_collapsed = false; }
-                ui.label("Parameters");
-            });
-        } else {
-            ui.horizontal(|ui| {
-                if ui.button("▼").clicked() { ui_layout.params_collapsed = true; }
-                ui.heading("Parameters");
-            });
+        let chevron = if ui_layout.params_collapsed { "▲" } else { "▼" };
+        let header_h = ui.spacing().interact_size.y.max(36.0);
+        let header_clicked = ui
+            .add_sized(
+                egui::vec2(ui.available_width(), header_h),
+                egui::Button::new(
+                    egui::RichText::new(format!("{chevron}  Parameters")).heading(),
+                )
+                .frame(false),
+            )
+            .clicked();
+        if header_clicked {
+            ui_layout.params_collapsed = !ui_layout.params_collapsed;
+        }
+
+        if !ui_layout.params_collapsed {
             ui.separator();
             let scroll_h = (panel_h - 48.0).max(40.0);
             egui::ScrollArea::vertical()
