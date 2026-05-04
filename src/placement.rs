@@ -29,7 +29,7 @@ use crate::PlacementCamera;
 const GHOST_ALPHA: f32 = 0.20;
 const REPLICA_ALPHA: f32 = 0.85;
 /// 表示上の枠線のエッジ帯幅（この幅でスケール操作）。タッチ向けに広め（全レイアウト共通）。
-const EDGE_WIDTH: f32 = 0.15;
+const EDGE_WIDTH: f32 = 0.1;
 const GIZMO_LINE_WIDTH_PX: f32 = 3.25;
 /// クリックヒットテスト用マージン（表示 AABB をこの分だけ広げてヒット判定）。
 const CLICK_MARGIN: f32 = 0.03;
