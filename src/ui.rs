@@ -3,7 +3,7 @@
 //!
 //! 幅 700px 以上: 左サイドパネル (Edit + Placement) + 中央 Result + 右パラメータパネル
 //! 幅 700px 未満: 上部 Result + 中段グローバル操作バー + 下部 (Edit | Placement)
-//!               + 右端 Parameters オーバーレイ
+//!               + Result 領域右上に Parameters（折りたたみ／展開時は Result 高さ全体）
 
 use bevy::camera::Viewport;
 use bevy::prelude::*;
@@ -170,7 +170,7 @@ fn layout_wide(
 fn layout_narrow(
     ctx: &egui::Context,
     win_w: f32,
-    win_h: f32,
+    _win_h: f32,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
@@ -217,8 +217,11 @@ fn layout_narrow(
         });
 
     // 2. グローバル操作バー（Edit/Placement の直上）
+    // `horizontal_wrapped` で折り返すため、exact_height だとクリップするので高さに余裕を持たせる。
     let global_resp = egui::TopBottomPanel::bottom("global_controls")
-        .exact_height(36.0)
+        .min_height(32.0)
+        .default_height(40.0)
+        .max_height(108.0)
         .show(ctx, |ui| {
             global_controls_bar(ui, state, undo_stack, buttons);
         });
@@ -231,11 +234,10 @@ fn layout_narrow(
         egui::pos2(win_w, global_resp.response.rect.min.y),
     );
 
-    // 4. Parameters オーバーレイ（Edit/Placement 領域の右端に浮かせる）
-    let overlay_top = global_resp.response.rect.min.y;
-    let overlay_h = win_h - overlay_top;
+    // 4. Parameters: 上部 Result 内に折りたたみ、展開時は Result の高さ全体を使用
+    let result_h = result_rect.height();
     params_overlay_narrow(
-        ctx, win_w, overlay_top, overlay_h,
+        ctx, win_w, result_h,
         state, undo_stack, placement, buttons, ui_layout,
     );
 
@@ -250,21 +252,26 @@ fn depth_slider_control(
     buttons: &ButtonInput<MouseButton>,
 ) {
     let mut depth = state.depth;
-    let depth_resp = ui.add(egui::Slider::new(&mut depth, 1..=12).text("Depth"));
+    let h = ui.spacing().interact_size.y;
+    let slider_w = (ui.available_width() - 4.0).clamp(40.0, 220.0);
+    let depth_resp = ui.add_sized(
+        egui::vec2(slider_w, h),
+        egui::Slider::new(&mut depth, 1..=12).text("Depth"),
+    );
     let egui_stuck = depth_resp.dragged() && !buttons.pressed(MouseButton::Left);
     if depth_resp.changed() && !egui_stuck {
         state.depth = depth;
     }
 }
 
-/// undo / redo / snap / depth / gen を横一列に並べた操作バー。
+/// undo / redo / snap / depth / gen を並べた操作バー（狭い幅では折り返し）。
 fn global_controls_bar(
     ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
     buttons: &ButtonInput<MouseButton>,
 ) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         // Undo / Redo
         if ui.add_enabled(undo_stack.can_undo(), egui::Button::new("↩")).clicked() {
             if let Some(prev) = undo_stack.undo_pop(state.clone()) {
@@ -276,7 +283,7 @@ fn global_controls_bar(
                 *state = next;
             }
         }
-        ui.separator();
+        ui.add_space(6.0);
 
         // Snap grid
         let mut snap_btn = egui::Button::new("Snap");
@@ -286,10 +293,10 @@ fn global_controls_bar(
         if ui.add(snap_btn).clicked() {
             state.snap_grid = !state.snap_grid;
         }
-        ui.separator();
+        ui.add_space(6.0);
 
         depth_slider_control(ui, state, buttons);
-        ui.separator();
+        ui.add_space(6.0);
 
         // Show all generations
         let mut gen_btn = egui::Button::new("Gen");
@@ -302,41 +309,54 @@ fn global_controls_bar(
     });
 }
 
-/// Parameters パネルを Edit/Placement 領域の右端に overlay で表示する。
+/// Parameters パネルを上部 Result 領域の右上に overlay で表示する。
+/// 折りたたみ時はタブのみ、展開時は `result_h`（Result の縦幅）いっぱいにスクロール領域を取る。
+///
+/// 全体を `allocate_ui` で Result 幅いっぱいに取らない（右上 pivot の実寸のみ）。
+/// さもないとクリップ・子レイアウトが崩れ、本文が見えなくなる。
 fn params_overlay_narrow(
     ctx: &egui::Context,
     win_w: f32,
-    top_y: f32,
-    total_h: f32,
+    result_h: f32,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     buttons: &ButtonInput<MouseButton>,
     ui_layout: &mut UiLayout,
 ) {
-    let panel_w = 200.0_f32;
-    let pos_x = if ui_layout.params_collapsed { win_w - 28.0 } else { win_w - panel_w };
+    let result_h = result_h.max(1.0);
+    let header_reserve = 48.0_f32.min(result_h * 0.35);
+    let scroll_h = (result_h - header_reserve).clamp(20.0, 10_000.0);
+
+    let clip = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(win_w, result_h));
 
     egui::Area::new(egui::Id::new("params_overlay"))
-        .fixed_pos(egui::pos2(pos_x, top_y))
+        .movable(false)
+        .pivot(egui::Align2::RIGHT_TOP)
+        .fixed_pos(egui::pos2(win_w, 0.0))
+        .constrain_to(clip)
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
+            // 極端に長いラベルで画面外へはみ出さないよう上限だけかける（幅は中身に合わせて縮む）
+            ui.set_max_width((win_w - 8.0).min(320.0));
+
             overlay_frame().show(ui, |ui| {
                 if ui_layout.params_collapsed {
-                    if ui.button("◀").clicked() {
+                    if ui.button("▶").clicked() {
                         ui_layout.params_collapsed = false;
                     }
                 } else {
-                    ui.set_min_width(panel_w - 20.0);
+                    ui.set_max_height(result_h);
                     ui.horizontal(|ui| {
-                        if ui.button("▶").clicked() {
+                        if ui.button("◀").clicked() {
                             ui_layout.params_collapsed = true;
                         }
                         ui.label(egui::RichText::new("Parameters").strong());
                     });
-                    ui.separator();
+                    ui.add_space(4.0);
                     egui::ScrollArea::vertical()
-                        .max_height(total_h - 48.0)
+                        .max_height(scroll_h)
+                        .auto_shrink([true, true])
                         .show(ui, |ui| {
                             draw_params_controls(ui, state, undo_stack, placement, buttons);
                         });
@@ -347,7 +367,7 @@ fn params_overlay_narrow(
 
 fn overlay_frame() -> egui::Frame {
     egui::Frame::default()
-        .inner_margin(egui::Margin::same(8))
+        .inner_margin(egui::Margin::symmetric(6, 8))
         .fill(egui::Color32::from_rgb(28, 28, 36))
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 70, 90)))
         .corner_radius(egui::CornerRadius::same(4))
@@ -413,14 +433,14 @@ fn draw_params_controls(
     depth_slider_control(ui, state, buttons);
 
     ui.checkbox(&mut state.show_all_generations, "Show all generations");
-    ui.separator();
+    ui.add_space(6.0);
 
     ui.label(format!("Lines: {}", state.base_shape.lines.len()));
     if ui.button("Clear lines").clicked() {
         undo_stack.push(state.clone());
         state.base_shape.lines.clear();
     }
-    ui.separator();
+    ui.add_space(6.0);
 
     ui.label(format!("Replicas: {}", state.replicas.len()));
     if ui.button("+ Add replica").clicked() {
@@ -428,7 +448,7 @@ fn draw_params_controls(
         placement.selected = Some(state.replicas.len());
         state.replicas.push(Replica::default_new());
     }
-    ui.separator();
+    ui.add_space(6.0);
 
     draw_replica_section(ui, state, undo_stack);
 }
