@@ -44,7 +44,6 @@ fn params_panel(
     mut placement: ResMut<PlacementState>,
     mut layout: ResMut<CanvasLayout>,
     mut ui_layout: ResMut<UiLayout>,
-    buttons: Res<ButtonInput<MouseButton>>,
     mut edit_cam: Query<
         &mut Camera,
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -91,7 +90,7 @@ fn params_panel(
         )
     };
 
-    paint_result_corner_controls(ctx, result_egui_rect, &mut *state, &buttons);
+    paint_result_corner_controls(ctx, result_egui_rect, &mut *state);
 
     if let Ok(mut cam) = edit_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
@@ -332,7 +331,6 @@ fn paint_result_corner_controls(
     ctx: &egui::Context,
     result_rect: egui::Rect,
     state: &mut FractalState,
-    buttons: &ButtonInput<MouseButton>,
 ) {
     if result_rect.width() < 1.0 || result_rect.height() < 1.0 {
         return;
@@ -348,27 +346,29 @@ fn paint_result_corner_controls(
         .current_pos(pivot_pos)
         .show(ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
+                // shrink-wrap の Area で available_width と wrap を使うとスライダー幅が崩れつまみ位置と数値がずれるため、
+                // 1 行の horizontal と result_rect 基準の幅だけ使う。
+                ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     ui.label(egui::RichText::new("Depth").small());
 
                     let h = ui.spacing().interact_size.y;
-                    let reserve_other = 200.0;
-                    let slider_w = (result_rect.width() - pad.x * 2.0 - reserve_other)
-                        .clamp(72.0, 200.0)
-                        .min(ui.available_width().max(72.0));
+                    // ラベル・DragValue・「Show generations」・余白ぶんを result 幅から除外
+                    const RESERVE_OTHER: f32 = 284.0;
+                    let slider_w = (result_rect.width() - pad.x * 2.0 - RESERVE_OTHER).clamp(80.0, 220.0);
 
                     let mut depth = state.depth;
                     let slider_r = ui.add_sized(
                         egui::vec2(slider_w, h),
                         egui::Slider::new(&mut depth, 1..=12).show_value(false),
                     );
-                    let dv_r =
-                        ui.add(egui::DragValue::new(&mut depth).range(1..=12).speed(1.0));
+                    ui.add(egui::DragValue::new(&mut depth).range(1..=12).speed(1.0));
 
-                    let stuck =
-                        (slider_r.dragged() || dv_r.dragged()) && !buttons.pressed(MouseButton::Left);
-                    if depth != state.depth && !stuck {
+                    // Bevy の LMB だけだとタッチ／トラックパッドとの齟齬で常にブロックすることがある。
+                    // スライダーの幽霊ドラッグだけ egui の primary_down で抑止する。
+                    let pointer_down = ctx.input(|i| i.pointer.primary_down());
+                    let phantom_slider = slider_r.dragged() && !pointer_down;
+                    if depth != state.depth && !phantom_slider {
                         state.depth = depth;
                     }
 
