@@ -10,12 +10,20 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::edit::DrawState;
 use crate::fractal::result_replica_color;
 use crate::state::{
     CanvasLayout, FractalState, PlacementState, Replica, UiLayout, UndoStack, REPLICA_SCALE_MAX,
     REPLICA_SCALE_MIN,
 };
 use crate::{EditCamera, PlacementCamera, ResultCamera};
+
+/// ナローレイアウトの + / - 用。インタラクト高さに対して少しだけ幅を足す。
+fn step_glyph_button(ui: &mut egui::Ui, label: &'static str) -> egui::Response {
+    let h = ui.spacing().interact_size.y;
+    let w = h + 14.0;
+    ui.add_sized(egui::vec2(w, h), egui::Button::new(label).small())
+}
 
 pub struct UiPlugin;
 
@@ -29,6 +37,7 @@ fn params_panel(
     mut contexts: EguiContexts,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut state: ResMut<FractalState>,
+    mut draw_state: ResMut<DrawState>,
     mut undo_stack: ResMut<UndoStack>,
     mut placement: ResMut<PlacementState>,
     mut layout: ResMut<CanvasLayout>,
@@ -58,13 +67,27 @@ fn params_panel(
 
     let (edit_egui_rect, placement_egui_rect, result_egui_rect) = if is_narrow {
         layout_narrow(
-            ctx, win_w, win_h,
-            &mut state, &mut undo_stack, &mut placement, &mut ui_layout, &buttons,
+            ctx,
+            win_w,
+            win_h,
+            &mut state,
+            &mut draw_state,
+            &mut undo_stack,
+            &mut placement,
+            &mut ui_layout,
+            &buttons,
         )
     } else {
         layout_wide(
-            ctx, win_w, win_h,
-            &mut state, &mut undo_stack, &mut placement, &mut ui_layout, &buttons,
+            ctx,
+            win_w,
+            win_h,
+            &mut state,
+            &mut draw_state,
+            &mut undo_stack,
+            &mut placement,
+            &mut ui_layout,
+            &buttons,
         )
     };
 
@@ -93,6 +116,7 @@ fn layout_wide(
     _win_w: f32,
     win_h: f32,
     state: &mut FractalState,
+    draw_state: &mut DrawState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
@@ -122,14 +146,19 @@ fn layout_wide(
             global_controls_bar(ui, state, undo_stack, buttons);
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
-                let can_del = !state.base_shape.lines.is_empty();
-                if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
-                    undo_stack.push(state.clone());
-                    state.base_shape.lines.pop();
+                let can_del = matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
+                let minus = ui.add_enabled(can_del, egui::Button::new("-").small());
+                if minus.clicked() {
+                    if let DrawState::Selected(idx) = *draw_state {
+                        undo_stack.push(state.clone());
+                        state.base_shape.lines.remove(idx);
+                        *draw_state = DrawState::Idle;
+                    }
                 }
                 if ui.small_button("Clear").clicked() {
                     undo_stack.push(state.clone());
                     state.base_shape.lines.clear();
+                    *draw_state = DrawState::Idle;
                 }
             });
             ui.add_space(4.0);
@@ -140,7 +169,8 @@ fn layout_wide(
                     state.replicas.push(Replica::default_new());
                 }
                 let can_del = placement.selected.is_some_and(|i| i < state.replicas.len());
-                if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
+                let minus = ui.add_enabled(can_del, egui::Button::new("-").small());
+                if minus.clicked() {
                     if let Some(i) = placement.selected {
                         undo_stack.push(state.clone());
                         state.replicas.remove(i);
@@ -169,6 +199,7 @@ fn layout_narrow(
     win_w: f32,
     _win_h: f32,
     state: &mut FractalState,
+    draw_state: &mut DrawState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
@@ -229,21 +260,27 @@ fn layout_narrow(
             ui.columns(2, |cols| {
                 cols[0].set_max_width(half_w);
                 edit_rect = show_canvas_block(&mut cols[0], "Base Shape", |ui| {
-                    let can_del = !state.base_shape.lines.is_empty();
-                    if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
-                        undo_stack.push(state.clone());
-                        state.base_shape.lines.pop();
+                    let can_del =
+                        matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
+                    let minus = ui.add_enabled_ui(can_del, |ui| step_glyph_button(ui, "-"));
+                    if minus.inner.clicked() {
+                        if let DrawState::Selected(idx) = *draw_state {
+                            undo_stack.push(state.clone());
+                            state.base_shape.lines.remove(idx);
+                            *draw_state = DrawState::Idle;
+                        }
                     }
                 });
                 cols[1].set_max_width(half_w);
                 placement_rect = show_canvas_block(&mut cols[1], "Placement", |ui| {
-                    if ui.small_button("+").clicked() {
+                    if step_glyph_button(ui, "+").clicked() {
                         undo_stack.push(state.clone());
                         placement.selected = Some(state.replicas.len());
                         state.replicas.push(Replica::default_new());
                     }
                     let can_del = placement.selected.is_some_and(|i| i < state.replicas.len());
-                    if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked() {
+                    let minus = ui.add_enabled_ui(can_del, |ui| step_glyph_button(ui, "-"));
+                    if minus.inner.clicked() {
                         if let Some(i) = placement.selected {
                             undo_stack.push(state.clone());
                             state.replicas.remove(i);
