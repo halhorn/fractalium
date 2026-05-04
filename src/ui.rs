@@ -99,20 +99,11 @@ fn layout_wide(
     buttons: &ButtonInput<MouseButton>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
-    let collapsed = ui_layout.params_collapsed;
-    let params_w = if collapsed { 28.0_f32 } else { 240.0_f32 };
+    let params_w = if ui_layout.params_collapsed { 28.0_f32 } else { 240.0_f32 };
     let right_resp = egui::SidePanel::right("params")
         .exact_width(params_w)
         .show(ctx, |ui| {
-            if collapsed {
-                if ui.button("▶").clicked() { ui_layout.params_collapsed = false; }
-            } else {
-                if ui.button("◀").clicked() { ui_layout.params_collapsed = true; }
-                ui.separator();
-                ui.heading("Parameters");
-                ui.separator();
-                draw_params_controls(ui, state, undo_stack, placement, buttons);
-            }
+            draw_params_panel(ui, state, undo_stack, placement, buttons, ui_layout);
         });
     let central_right_x = right_resp.response.rect.min.x;
 
@@ -177,12 +168,43 @@ fn layout_narrow(
     ui_layout: &mut UiLayout,
     buttons: &ButtonInput<MouseButton>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
-    // 1. 下部: Edit + Placement キャンバス
+    // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
-    let bottom_h = canvas_side + 52.0;
+    let panel_h = canvas_side + 52.0;
+
+    // 1. Params panel（最下部：折りたたみ時はタブ行、展開時は下から押し上げ）
+    //    bottom パネルは先に定義したものが最下位に積まれる
+    let params_panel = egui::TopBottomPanel::bottom("params");
+    let params_panel = if ui_layout.params_collapsed {
+        params_panel
+    } else {
+        params_panel.exact_height(panel_h)
+    };
+    params_panel.show(ctx, |ui| {
+        if ui_layout.params_collapsed {
+            ui.horizontal(|ui| {
+                if ui.button("▲").clicked() { ui_layout.params_collapsed = false; }
+                ui.label("Parameters");
+            });
+        } else {
+            ui.horizontal(|ui| {
+                if ui.button("▼").clicked() { ui_layout.params_collapsed = true; }
+                ui.heading("Parameters");
+            });
+            ui.separator();
+            let scroll_h = (panel_h - 48.0).max(40.0);
+            egui::ScrollArea::vertical()
+                .max_height(scroll_h)
+                .show(ui, |ui| {
+                    draw_params_controls(ui, state, undo_stack, placement, buttons);
+                });
+        }
+    });
+
+    // 2. Edit + Placement キャンバス（params の直上）
     let bottom_resp = egui::TopBottomPanel::bottom("bottom_canvases")
         .frame(egui::Frame::default())
-        .exact_height(bottom_h)
+        .exact_height(panel_h)
         .show(ctx, |ui| {
             let half_w = ui.available_width() / 2.0;
             let mut edit_rect = egui::Rect::NOTHING;
@@ -216,8 +238,7 @@ fn layout_narrow(
             (edit_rect, placement_rect)
         });
 
-    // 2. グローバル操作バー（Edit/Placement の直上）
-    // `horizontal_wrapped` で折り返すため、exact_height だとクリップするので高さに余裕を持たせる。
+    // 3. グローバル操作バー（Edit/Placement の直上）
     let global_resp = egui::TopBottomPanel::bottom("global_controls")
         .min_height(32.0)
         .default_height(40.0)
@@ -228,17 +249,10 @@ fn layout_narrow(
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
 
-    // 3. Result: 残り領域（上部全体）
+    // 4. Result: 残り領域（全幅）
     let result_rect = egui::Rect::from_min_max(
         egui::pos2(0.0, 0.0),
         egui::pos2(win_w, global_resp.response.rect.min.y),
-    );
-
-    // 4. Parameters: 上部 Result 内に折りたたみ、展開時は Result の高さ全体を使用
-    let result_h = result_rect.height();
-    params_overlay_narrow(
-        ctx, win_w, result_h,
-        state, undo_stack, placement, buttons, ui_layout,
     );
 
     (edit_egui_rect, placement_egui_rect, result_rect)
@@ -309,68 +323,31 @@ fn global_controls_bar(
     });
 }
 
-/// Parameters パネルを上部 Result 領域の右上に overlay で表示する。
-/// 折りたたみ時はタブのみ、展開時は `result_h`（Result の縦幅）いっぱいにスクロール領域を取る。
-///
-/// 全体を `allocate_ui` で Result 幅いっぱいに取らない（右上 pivot の実寸のみ）。
-/// さもないとクリップ・子レイアウトが崩れ、本文が見えなくなる。
-fn params_overlay_narrow(
-    ctx: &egui::Context,
-    win_w: f32,
-    result_h: f32,
+/// 折りたたみ状態を含むパラメータパネルの中身を描画する共通関数（wide / narrow 共用）。
+fn draw_params_panel(
+    ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     buttons: &ButtonInput<MouseButton>,
     ui_layout: &mut UiLayout,
 ) {
-    let result_h = result_h.max(1.0);
-    let header_reserve = 48.0_f32.min(result_h * 0.35);
-    let scroll_h = (result_h - header_reserve).clamp(20.0, 10_000.0);
-
-    let clip = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(win_w, result_h));
-
-    egui::Area::new(egui::Id::new("params_overlay"))
-        .movable(false)
-        .pivot(egui::Align2::RIGHT_TOP)
-        .fixed_pos(egui::pos2(win_w, 0.0))
-        .constrain_to(clip)
-        .order(egui::Order::Foreground)
-        .show(ctx, |ui| {
-            // 極端に長いラベルで画面外へはみ出さないよう上限だけかける（幅は中身に合わせて縮む）
-            ui.set_max_width((win_w - 8.0).min(320.0));
-
-            overlay_frame().show(ui, |ui| {
-                if ui_layout.params_collapsed {
-                    if ui.button("▶").clicked() {
-                        ui_layout.params_collapsed = false;
-                    }
-                } else {
-                    ui.set_max_height(result_h);
-                    ui.horizontal(|ui| {
-                        if ui.button("◀").clicked() {
-                            ui_layout.params_collapsed = true;
-                        }
-                        ui.label(egui::RichText::new("Parameters").strong());
-                    });
-                    ui.add_space(4.0);
-                    egui::ScrollArea::vertical()
-                        .max_height(scroll_h)
-                        .auto_shrink([true, true])
-                        .show(ui, |ui| {
-                            draw_params_controls(ui, state, undo_stack, placement, buttons);
-                        });
-                }
-            });
+    if ui_layout.params_collapsed {
+        if ui.button("▶").clicked() {
+            ui_layout.params_collapsed = false;
+        }
+    } else {
+        ui.horizontal(|ui| {
+            if ui.button("◀").clicked() {
+                ui_layout.params_collapsed = true;
+            }
+            ui.heading("Parameters");
         });
-}
-
-fn overlay_frame() -> egui::Frame {
-    egui::Frame::default()
-        .inner_margin(egui::Margin::symmetric(6, 8))
-        .fill(egui::Color32::from_rgb(28, 28, 36))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 70, 90)))
-        .corner_radius(egui::CornerRadius::same(4))
+        ui.separator();
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            draw_params_controls(ui, state, undo_stack, placement, buttons);
+        });
+    }
 }
 
 /// タイトルヘッダ＋キャンバス本体を持つブロックを描画し、本体の egui::Rect を返す。
