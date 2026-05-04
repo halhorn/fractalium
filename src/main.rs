@@ -2,6 +2,7 @@ mod edit;
 mod fractal;
 mod grid;
 mod placement;
+mod share;
 mod state;
 mod ui;
 mod view;
@@ -13,6 +14,7 @@ use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 use edit::EditPlugin;
 use fractal::FractalPlugin;
 use placement::PlacementPlugin;
+use share::SharePlugin;
 use state::{CanvasLayout, FractalState, UiLayout};
 use ui::UiPlugin;
 use view::ViewPlugin;
@@ -58,7 +60,14 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
-        .add_plugins((EditPlugin, FractalPlugin, PlacementPlugin, ViewPlugin, UiPlugin))
+        .add_plugins((
+            EditPlugin,
+            FractalPlugin,
+            PlacementPlugin,
+            ViewPlugin,
+            UiPlugin,
+            SharePlugin,
+        ))
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
         .insert_resource(FractalState::default())
         .insert_resource(CanvasLayout::default())

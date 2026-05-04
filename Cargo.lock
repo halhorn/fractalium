@@ -2652,8 +2652,13 @@ dependencies = [
 name = "fractalium"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "bevy",
  "bevy_egui",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

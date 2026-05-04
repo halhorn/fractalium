@@ -238,4 +238,11 @@ impl UndoStack {
 
     pub fn can_undo(&self) -> bool { !self.history.is_empty() }
     pub fn can_redo(&self) -> bool { !self.redo_stack.is_empty() }
+
+    /// URL から状態を読み込んだときなど、履歴を空にする。
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub fn clear(&mut self) {
+        self.history.clear();
+        self.redo_stack.clear();
+    }
 }

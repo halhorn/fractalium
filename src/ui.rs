@@ -14,6 +14,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::edit::DrawState;
 use crate::fractal::result_replica_color;
+use crate::share;
 use crate::state::{
     CanvasLayout, FractalState, PlacementState, Replica, ScreenRect, UiLayout, UndoStack,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
@@ -407,6 +408,22 @@ fn global_controls_bar(
             }
         }
         ui.add_space(6.0);
+
+        if ui.button("Copy link").clicked() {
+            match share::encode_state(state) {
+                Ok(token) => match share::share_url_from_token(&token) {
+                    Ok(url) => {
+                        ui.ctx().copy_text(url);
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            let _ = share::set_location_share_token(&token);
+                        }
+                    }
+                    Err(e) => bevy::log::warn!("share URL: {e}"),
+                },
+                Err(e) => bevy::log::warn!("share encode: {e}"),
+            }
+        }
 
         // Snap grid
         let mut snap_btn = egui::Button::new("Snap");
