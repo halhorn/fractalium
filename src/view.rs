@@ -315,7 +315,9 @@ fn handle_pinch_zoom(
             PinchTarget::Placement => {
                 if let Some(sel) = placement.selected.filter(|&i| i < state.replicas.len()) {
                     if let Some(replica) = state.replicas.get_mut(sel) {
-                        apply_replica_scale_factor(replica, scale_factor);
+                        // ortho と同じ prev/distance だとピンチの見た目と逆（離すと縮む）になる。指を広げて拡大に揃える。
+                        let replica_factor = distance / pinch.prev_distance;
+                        apply_replica_scale_factor(replica, replica_factor);
                     }
                 } else if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
                     apply_pinch_at_world_origin(&mut proj, &mut transform, scale_factor);
