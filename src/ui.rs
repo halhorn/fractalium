@@ -2,8 +2,8 @@
 //! および各カメラへのビューポート分配を提供するモジュール。
 //!
 //! 幅 700px 以上: 左サイドパネル（Undo/Snap を含む操作バー + Edit + Placement）+ 中央 Result + 右パラメータパネル。
-//! Result ウィンドウ右下に Depth（スライダー＋数値）と Show generations のトグルボタンがある。
-//! 幅 700px 未満: 最上部タイトル + 中段 Result（Depth / Show generations は Result 右下に重ね表示）
+//! Result ウィンドウ左上に Depth（スライダー＋数値）と Show generations のトグルを重ね表示する。
+//! 幅 700px 未満: 最上部タイトル + 中段 Result（上記オーバーレイを含む）
 //!               + Undo/Snap グローバル操作バー + 下部 (Edit | Placement)
 //!               + Parameters（折りたたみ／展開時は Result と干渉しない下部パネル）
 
@@ -326,7 +326,7 @@ fn app_title_bar_contents(ui: &mut egui::Ui) {
     });
 }
 
-/// Result 右下オーバーレイの論理ピクセル矩形を `layout` に書き込む（Result ビュー入力の貫通防止用）。
+/// Result 左上の Depth / Show generations オーバーレイの論理ピクセル矩形を `layout` に書き込む（Result ビュー入力の貫通防止用）。
 fn paint_result_corner_controls(
     ctx: &egui::Context,
     result_rect: egui::Rect,
@@ -339,13 +339,11 @@ fn paint_result_corner_controls(
     }
 
     let pad = egui::vec2(14.0, 12.0);
-    let pivot_pos = result_rect.max - pad;
-
     let pack = egui::Area::new(egui::Id::new("result_depth_generations_corner"))
         .order(egui::Order::Middle)
         .constrain_to(result_rect)
-        .pivot(egui::Align2::RIGHT_BOTTOM)
-        .current_pos(pivot_pos)
+        .pivot(egui::Align2::LEFT_TOP)
+        .current_pos(result_rect.min + pad)
         .show(ctx, |ui| {
             let framed = egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -388,7 +386,7 @@ fn paint_result_corner_controls(
     });
 }
 
-/// undo / redo / snap を並べた操作バー（狭い幅では折り返し）。Depth / generations は Result 右下へ表示。
+/// undo / redo / snap を並べた操作バー（狭い幅では折り返し）。Depth / generations は Result 左上へオーバーレイ表示。
 fn global_controls_bar(
     ui: &mut egui::Ui,
     state: &mut FractalState,
