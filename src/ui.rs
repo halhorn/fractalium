@@ -15,8 +15,8 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::edit::DrawState;
 use crate::fractal::result_replica_color;
 use crate::state::{
-    CanvasLayout, FractalState, PlacementState, Replica, UiLayout, UndoStack, REPLICA_SCALE_MAX,
-    REPLICA_SCALE_MIN,
+    CanvasLayout, FractalState, PlacementState, Replica, ScreenRect, UiLayout, UndoStack,
+    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
 };
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
@@ -90,8 +90,7 @@ fn params_panel(
         )
     };
 
-    paint_result_corner_controls(ctx, result_egui_rect, &mut *state);
-
+    paint_result_corner_controls(ctx, result_egui_rect, &mut *state, &mut layout);
     if let Ok(mut cam) = edit_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
     }
@@ -326,34 +325,33 @@ fn app_title_bar_contents(ui: &mut egui::Ui) {
     });
 }
 
-/// Result の右下へ重ねる Depth（スライダー＋数値）と「Show generations」トグル（Snap と同種のボタン）。
+/// Result 右下オーバーレイの論理ピクセル矩形を `layout` に書き込む（Result ビュー入力の貫通防止用）。
 fn paint_result_corner_controls(
     ctx: &egui::Context,
     result_rect: egui::Rect,
     state: &mut FractalState,
+    layout: &mut CanvasLayout,
 ) {
     if result_rect.width() < 1.0 || result_rect.height() < 1.0 {
+        layout.result_depth_controls_rect = None;
         return;
     }
 
     let pad = egui::vec2(14.0, 12.0);
     let pivot_pos = result_rect.max - pad;
 
-    egui::Area::new(egui::Id::new("result_depth_generations_corner"))
+    let pack = egui::Area::new(egui::Id::new("result_depth_generations_corner"))
         .order(egui::Order::Middle)
         .constrain_to(result_rect)
         .pivot(egui::Align2::RIGHT_BOTTOM)
         .current_pos(pivot_pos)
         .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                // shrink-wrap の Area で available_width と wrap を使うとスライダー幅が崩れつまみ位置と数値がずれるため、
-                // 1 行の horizontal と result_rect 基準の幅だけ使う。
+            let framed = egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     ui.label(egui::RichText::new("Depth").small());
 
                     let h = ui.spacing().interact_size.y;
-                    // ラベル・DragValue・「Show generations」・余白ぶんを result 幅から除外
                     const RESERVE_OTHER: f32 = 284.0;
                     let slider_w = (result_rect.width() - pad.x * 2.0 - RESERVE_OTHER).clamp(80.0, 220.0);
 
@@ -364,8 +362,6 @@ fn paint_result_corner_controls(
                     );
                     ui.add(egui::DragValue::new(&mut depth).range(1..=12).speed(1.0));
 
-                    // Bevy の LMB だけだとタッチ／トラックパッドとの齟齬で常にブロックすることがある。
-                    // スライダーの幽霊ドラッグだけ egui の primary_down で抑止する。
                     let pointer_down = ctx.input(|i| i.pointer.primary_down());
                     let phantom_slider = slider_r.dragged() && !pointer_down;
                     if depth != state.depth && !phantom_slider {
@@ -381,7 +377,14 @@ fn paint_result_corner_controls(
                     }
                 });
             });
+            framed.response.rect
         });
+
+    let egui_r = pack.inner.expand(4.0);
+    layout.result_depth_controls_rect = Some(ScreenRect {
+        min: Vec2::new(egui_r.min.x, egui_r.min.y),
+        max: Vec2::new(egui_r.max.x, egui_r.max.y),
+    });
 }
 
 /// undo / redo / snap を並べた操作バー（狭い幅では折り返し）。Depth / generations は Result 右下へ表示。

@@ -7,16 +7,33 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::state::{
-    DoubleTapZoomActive, FractalState, PlacementState, Replica, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    CanvasLayout, DoubleTapZoomActive, FractalState, PlacementState, Replica, REPLICA_SCALE_MAX,
+    REPLICA_SCALE_MIN,
 };
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
+/// 論理画面上の位置が Depth／generations オーバーレイ上か。
+#[inline]
+fn pos_on_result_depth_overlay(layout: &CanvasLayout, pos: Vec2) -> bool {
+    layout
+        .result_depth_controls_rect
+        .is_some_and(|r| r.contains(pos))
+}
+
 /// ズーム時にカーソル位置を中心にする（true）か原点固定にする（false）か。
+/// Result のみ、`USE_RESULT_DEPTH_BLOCK` でオーバーレイ直上のホイールを無視する。
 trait ZoomTowardsCursor {
     const ZOOM_TOWARDS_CURSOR: bool;
+    const USE_RESULT_DEPTH_BLOCK: bool;
 }
-impl ZoomTowardsCursor for EditCamera   { const ZOOM_TOWARDS_CURSOR: bool = false; }
-impl ZoomTowardsCursor for ResultCamera { const ZOOM_TOWARDS_CURSOR: bool = true; }
+impl ZoomTowardsCursor for EditCamera {
+    const ZOOM_TOWARDS_CURSOR: bool = false;
+    const USE_RESULT_DEPTH_BLOCK: bool = false;
+}
+impl ZoomTowardsCursor for ResultCamera {
+    const ZOOM_TOWARDS_CURSOR: bool = true;
+    const USE_RESULT_DEPTH_BLOCK: bool = true;
+}
 
 const ZOOM_SPEED: f32 = 0.02;
 const ZOOM_MIN: f32 = 0.005;
@@ -155,6 +172,7 @@ fn zoom_placement_canvas(
 fn zoom_canvas<C: Component + ZoomTowardsCursor>(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    layout: Res<CanvasLayout>,
     mut cam_q: Query<(&Camera, &GlobalTransform, &mut Projection, &mut Transform), With<C>>,
 ) {
     let total = scroll.delta.y;
@@ -166,6 +184,14 @@ fn zoom_canvas<C: Component + ZoomTowardsCursor>(
 
     if !cursor_in_viewport(window, cam) {
         return;
+    }
+
+    if C::USE_RESULT_DEPTH_BLOCK {
+        if let Some(pos) = window.cursor_position()
+            && pos_on_result_depth_overlay(&layout, pos)
+        {
+            return;
+        }
     }
 
     let Projection::Orthographic(ref mut ortho) = *proj else { return; };
@@ -231,6 +257,7 @@ fn apply_pinch_at_world_origin(
 fn handle_pinch_zoom(
     touches: Res<Touches>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    layout: Res<CanvasLayout>,
     mut pinch: ResMut<PinchState>,
     placement: Res<PlacementState>,
     mut state: ResMut<FractalState>,
@@ -266,10 +293,15 @@ fn handle_pinch_zoom(
         let p_in = placement_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c)).unwrap_or(false);
         let r_in = result_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c)).unwrap_or(false);
 
-        pinch.target = if e_in { PinchTarget::Edit }
-            else if p_in { PinchTarget::Placement }
-            else if r_in { PinchTarget::Result }
-            else { PinchTarget::None };
+        pinch.target = if e_in {
+            PinchTarget::Edit
+        } else if p_in {
+            PinchTarget::Placement
+        } else if r_in && !pos_on_result_depth_overlay(&layout, midpoint) {
+            PinchTarget::Result
+        } else {
+            PinchTarget::None
+        };
     }
 
     if pinch.active && pinch.prev_distance > 0.0 {
@@ -311,6 +343,7 @@ fn pan_result(
     buttons: Res<ButtonInput<MouseButton>>,
     touches: Res<Touches>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    layout: Res<CanvasLayout>,
     mut result_cam_q: Query<(&Camera, &GlobalTransform, &mut Transform), With<ResultCamera>>,
 ) {
     let Ok(window) = windows.single() else { return; };
@@ -343,9 +376,10 @@ fn pan_result(
                 pan_state.touch_id = None;
                 break;
             }
-            if pos_in_viewport(touch.position(), window, cam) {
+            let pos = touch.position();
+            if pos_in_viewport(pos, window, cam) && !pos_on_result_depth_overlay(&layout, pos) {
                 pan_state.touch_id = Some(touch.id());
-                pan_state.touch_last_pos = touch.position();
+                pan_state.touch_last_pos = pos;
             }
         }
     }
@@ -377,7 +411,10 @@ fn pan_result(
         pan_state.mouse_active = false;
     }
 
-    if buttons.just_pressed(MouseButton::Left) && cursor_in_viewport(window, cam) {
+    if buttons.just_pressed(MouseButton::Left)
+        && cursor_in_viewport(window, cam)
+        && !pos_on_result_depth_overlay(&layout, cursor_screen)
+    {
         pan_state.mouse_active = true;
         pan_state.mouse_last_pos = cursor_screen;
     }
@@ -403,6 +440,7 @@ fn handle_double_tap_zoom(
     time: Res<Time>,
     touches: Res<Touches>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    layout: Res<CanvasLayout>,
     mut dtap_state: ResMut<DoubleTapZoomState>,
     mut dtap_active: ResMut<DoubleTapZoomActive>,
     pinch: Res<PinchState>,
@@ -489,10 +527,15 @@ fn handle_double_tap_zoom(
             let e_in = edit_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(pos, window, c)).unwrap_or(false);
             let p_in = placement_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(pos, window, c)).unwrap_or(false);
             let r_in = result_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(pos, window, c)).unwrap_or(false);
-            let target = if e_in { PinchTarget::Edit }
-                else if p_in { PinchTarget::Placement }
-                else if r_in { PinchTarget::Result }
-                else { PinchTarget::None };
+            let target = if e_in {
+                PinchTarget::Edit
+            } else if p_in {
+                PinchTarget::Placement
+            } else if r_in && !pos_on_result_depth_overlay(&layout, pos) {
+                PinchTarget::Result
+            } else {
+                PinchTarget::None
+            };
 
             if target != PinchTarget::None {
                 dtap_state.active_id = Some(touch.id());
