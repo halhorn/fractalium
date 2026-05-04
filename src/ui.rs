@@ -103,7 +103,7 @@ fn layout_wide(
     let right_resp = egui::SidePanel::right("params")
         .exact_width(params_w)
         .show(ctx, |ui| {
-            draw_params_panel(ui, state, undo_stack, placement, buttons, ui_layout);
+            draw_params_panel(ui, state, undo_stack, ui_layout);
         });
     let central_right_x = right_resp.response.rect.min.x;
 
@@ -211,7 +211,7 @@ fn layout_narrow(
             egui::ScrollArea::vertical()
                 .max_height(scroll_h)
                 .show(ui, |ui| {
-                    draw_params_controls(ui, state, undo_stack, placement, buttons);
+                    draw_params_controls(ui, state, undo_stack);
                 });
         }
     });
@@ -357,8 +357,6 @@ fn draw_params_panel(
     ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
-    placement: &mut PlacementState,
-    buttons: &ButtonInput<MouseButton>,
     ui_layout: &mut UiLayout,
 ) {
     if ui_layout.params_collapsed {
@@ -374,7 +372,7 @@ fn draw_params_panel(
         });
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| {
-            draw_params_controls(ui, state, undo_stack, placement, buttons);
+            draw_params_controls(ui, state, undo_stack);
         });
     }
 }
@@ -433,27 +431,11 @@ fn draw_params_controls(
     ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
-    placement: &mut PlacementState,
-    buttons: &ButtonInput<MouseButton>,
 ) {
-    depth_slider_control(ui, state, buttons);
-
-    ui.checkbox(&mut state.show_all_generations, "Show all generations");
-    ui.add_space(6.0);
-
     ui.label(format!("Lines: {}", state.base_shape.lines.len()));
-    if ui.button("Clear lines").clicked() {
-        undo_stack.push(state.clone());
-        state.base_shape.lines.clear();
-    }
     ui.add_space(6.0);
 
     ui.label(format!("Replicas: {}", state.replicas.len()));
-    if ui.button("+ Add replica").clicked() {
-        undo_stack.push(state.clone());
-        placement.selected = Some(state.replicas.len());
-        state.replicas.push(Replica::default_new());
-    }
     ui.add_space(6.0);
 
     draw_replica_section(ui, state, undo_stack);
