@@ -4,6 +4,7 @@ mod grid;
 mod placement;
 mod share;
 mod state;
+mod toast;
 mod ui;
 mod view;
 

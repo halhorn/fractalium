@@ -19,6 +19,7 @@ use crate::state::{
     CanvasLayout, FractalState, PlacementState, Replica, ScreenRect, UiLayout, UndoStack,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
 };
+use crate::toast::EguiToast;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
 /// ナローレイアウトの + / - 用。インタラクト高さに対して少しだけ幅を足す。
@@ -32,7 +33,8 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiPrimaryContextPass, params_panel);
+        app.init_resource::<EguiToast>()
+            .add_systems(EguiPrimaryContextPass, params_panel);
     }
 }
 
@@ -45,6 +47,7 @@ fn params_panel(
     mut placement: ResMut<PlacementState>,
     mut layout: ResMut<CanvasLayout>,
     mut ui_layout: ResMut<UiLayout>,
+    mut toast: ResMut<EguiToast>,
     mut edit_cam: Query<
         &mut Camera,
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -77,6 +80,7 @@ fn params_panel(
             &mut undo_stack,
             &mut placement,
             &mut ui_layout,
+            &mut toast,
         )
     } else {
         layout_wide(
@@ -88,10 +92,12 @@ fn params_panel(
             &mut undo_stack,
             &mut placement,
             &mut ui_layout,
+            &mut toast,
         )
     };
 
     paint_result_corner_controls(ctx, result_egui_rect, &mut *state, &mut layout);
+    toast.paint(ctx);
     if let Ok(mut cam) = edit_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
     }
@@ -121,6 +127,7 @@ fn layout_wide(
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
+    toast: &mut EguiToast,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
     let params_w = if ui_layout.params_collapsed { 28.0_f32 } else { 240.0_f32 };
@@ -143,7 +150,7 @@ fn layout_wide(
                 app_title_bar_contents(ui);
             });
             ui.separator();
-            global_controls_bar(ui, state, undo_stack);
+            global_controls_bar(ui, state, undo_stack, toast);
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
                 let can_del = matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
@@ -203,6 +210,7 @@ fn layout_narrow(
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
+    toast: &mut EguiToast,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
@@ -297,7 +305,7 @@ fn layout_narrow(
         .default_height(40.0)
         .max_height(108.0)
         .show(ctx, |ui| {
-            global_controls_bar(ui, state, undo_stack);
+            global_controls_bar(ui, state, undo_stack, toast);
         });
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
@@ -386,51 +394,64 @@ fn paint_result_corner_controls(
     });
 }
 
-/// undo / redo / snap を並べた操作バー（狭い幅では折り返し）。Depth / generations は Result 左上へオーバーレイ表示。
+/// undo / redo / snap を並べた操作バー（狭い幅では左側グループが折り返し）。Share は常にバー右端。
 fn global_controls_bar(
     ui: &mut egui::Ui,
     state: &mut FractalState,
     undo_stack: &mut UndoStack,
+    toast: &mut EguiToast,
 ) {
     ui.add_space(4.0);
-    ui.horizontal_wrapped(|ui| {
-        // Undo / Redo
-        if ui.add_enabled(undo_stack.can_undo(), egui::Button::new("↩")).clicked() {
-            if let Some(prev) = undo_stack.undo_pop(state.clone()) {
-                *state = prev;
+    let row_h = ui.spacing().interact_size.y;
+    ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(undo_stack.can_undo(), egui::Button::new("↩")).clicked() {
+                if let Some(prev) = undo_stack.undo_pop(state.clone()) {
+                    *state = prev;
+                }
             }
-        }
-        if ui.add_enabled(undo_stack.can_redo(), egui::Button::new("↪")).clicked() {
-            if let Some(next) = undo_stack.redo_pop(state.clone()) {
-                *state = next;
+            if ui.add_enabled(undo_stack.can_redo(), egui::Button::new("↪")).clicked() {
+                if let Some(next) = undo_stack.redo_pop(state.clone()) {
+                    *state = next;
+                }
             }
-        }
-        ui.add_space(6.0);
+            ui.add_space(6.0);
 
-        if ui.button("Copy link").clicked() {
-            match share::encode_state(state) {
-                Ok(token) => match share::share_url_from_token(&token) {
-                    Ok(url) => {
-                        ui.ctx().copy_text(url);
-                        #[cfg(target_arch = "wasm32")]
-                        {
-                            let _ = share::set_location_share_token(&token);
-                        }
+            let mut snap_btn = egui::Button::new("Snap");
+            if state.snap_grid {
+                snap_btn = snap_btn.fill(egui::Color32::from_rgb(60, 120, 60));
+            }
+            if ui.add(snap_btn).clicked() {
+                state.snap_grid = !state.snap_grid;
+            }
+        });
+
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width().max(0.0), row_h),
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                if ui
+                    .add(egui::Button::new("Share"))
+                    .on_hover_text("copy link")
+                    .clicked()
+                {
+                    match share::encode_state(state) {
+                        Ok(token) => match share::share_url_from_token(&token) {
+                            Ok(url) => {
+                                ui.ctx().copy_text(url);
+                                #[cfg(target_arch = "wasm32")]
+                                {
+                                    let _ = share::set_location_share_token(&token);
+                                }
+                                toast.show(ui.ctx(), "Link Copied");
+                            }
+                            Err(e) => bevy::log::warn!("share URL: {e}"),
+                        },
+                        Err(e) => bevy::log::warn!("share encode: {e}"),
                     }
-                    Err(e) => bevy::log::warn!("share URL: {e}"),
-                },
-                Err(e) => bevy::log::warn!("share encode: {e}"),
-            }
-        }
-
-        // Snap grid
-        let mut snap_btn = egui::Button::new("Snap");
-        if state.snap_grid {
-            snap_btn = snap_btn.fill(egui::Color32::from_rgb(60, 120, 60));
-        }
-        if ui.add(snap_btn).clicked() {
-            state.snap_grid = !state.snap_grid;
-        }
+                }
+            },
+        );
     });
 }
 
