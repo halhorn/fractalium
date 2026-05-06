@@ -1,5 +1,6 @@
 mod edit;
 mod fractal;
+mod fractal_presets;
 mod grid;
 mod placement;
 mod seed_shape;
@@ -15,6 +16,7 @@ use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
 use edit::EditPlugin;
 use fractal::FractalPlugin;
+use fractal_presets::FractalPreset;
 use placement::PlacementPlugin;
 use share::SharePlugin;
 use state::{CanvasLayout, FractalState, UiLayout};
@@ -48,6 +50,15 @@ pub fn result_layer() -> RenderLayers {
     RenderLayers::layer(2)
 }
 
+fn initial_fractal_state() -> FractalState {
+    if let Ok(raw) = std::env::var("FRACTALIUM_BOOT_PRESET") {
+        if let Some(preset) = FractalPreset::from_boot_token(&raw) {
+            return preset.build();
+        }
+    }
+    FractalState::default()
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -71,7 +82,7 @@ fn main() {
             SharePlugin,
         ))
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
-        .insert_resource(FractalState::default())
+        .insert_resource(initial_fractal_state())
         .insert_resource(CanvasLayout::default())
         .insert_resource(UiLayout::default())
         .add_systems(Startup, setup)

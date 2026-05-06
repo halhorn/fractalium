@@ -14,10 +14,12 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::edit::DrawState;
 use crate::fractal::result_replica_color;
+use crate::fractal_presets::FractalPreset;
 use crate::seed_shape::BaseShapePreset;
 use crate::share;
 use crate::state::{
-    CanvasLayout, FractalState, PlacementState, Replica, ScreenRect, UiLayout, UndoStack,
+    CanvasLayout, FractalState, PlacementDrag, PlacementState, Replica, ScreenRect, UiLayout,
+    UndoStack,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
 };
 use crate::toast::EguiToast;
@@ -195,7 +197,7 @@ fn layout_wide(
                 app_title_bar_contents(ui);
             });
             ui.separator();
-            global_controls_bar(ui, state, undo_stack, toast);
+            global_controls_bar(ui, state, draw_state, placement, undo_stack, toast);
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Seed", |ui| {
                 base_shape_header_buttons(ui, state, draw_state, undo_stack, false);
@@ -328,7 +330,7 @@ fn layout_narrow(
         .default_height(40.0)
         .max_height(108.0)
         .show(ctx, |ui| {
-            global_controls_bar(ui, state, undo_stack, toast);
+            global_controls_bar(ui, state, draw_state, placement, undo_stack, toast);
         });
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
@@ -421,6 +423,8 @@ fn paint_result_corner_controls(
 fn global_controls_bar(
     ui: &mut egui::Ui,
     state: &mut FractalState,
+    draw_state: &mut DrawState,
+    placement: &mut PlacementState,
     undo_stack: &mut UndoStack,
     toast: &mut EguiToast,
 ) {
@@ -447,6 +451,23 @@ fn global_controls_bar(
             if ui.add(snap_btn).clicked() {
                 state.snap_grid = !state.snap_grid;
             }
+
+            ui.add_space(6.0);
+            ui.menu_button("Preset", |ui| {
+                ui.set_min_width(200.0);
+                for &preset in FractalPreset::ALL {
+                    if ui.button(preset.label()).clicked() {
+                        undo_stack.push(state.clone());
+                        let snap = state.snap_grid;
+                        *state = preset.build();
+                        state.snap_grid = snap;
+                        *draw_state = DrawState::Idle;
+                        placement.selected = None;
+                        placement.drag = PlacementDrag::Idle;
+                        ui.close();
+                    }
+                }
+            });
         });
 
         ui.allocate_ui_with_layout(
