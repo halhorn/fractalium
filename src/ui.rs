@@ -14,7 +14,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::edit::DrawState;
 use crate::fractal::result_replica_color;
-use crate::presets::BaseShapePreset;
+use crate::seed_shape::BaseShapePreset;
 use crate::share;
 use crate::state::{
     CanvasLayout, FractalState, PlacementState, Replica, ScreenRect, UiLayout, UndoStack,
