@@ -9,7 +9,7 @@
 | Phase | 内容 |
 |-------|------|
 | [Phase 1: UI と適用の共通枠](phase1_ui.md) | グローバル操作バーに「Preset」ボタンを追加し、`menu_button` ＋一覧から選択すると `FractalState`（および必要な関連リソース）が一括更新される。Undo・ワイド／ナロー共通。 |
-| [Phase 2: プリセット目録と有名フラクタル約10種](phase2_catalog.md) | 各プリセットが設定する `base_shape`・`replicas`・`depth`（と必要なら `show_all_generations`）を定義する。学術・一般向けで名前の通じるものを優先する。 |
+| [Phase 2: プリセット目録と有名フラクタル 8 種](phase2_catalog.md) | 各プリセットが設定する `base_shape`・`replicas`・`depth`（と必要なら `show_all_generations`）を定義する。学術・一般向けで名前の通じるものを優先する。 |
 
 **実装スタックの前提**: UI は `bevy_egui`。Seed の「Shape」と同様に **egui の `menu_button` ＋ メニュー項目**で「押下 → 一覧 → 選択」を実現する。
 
@@ -34,5 +34,5 @@
 
 ### Phase 2
 
-- [ ] [Phase 2 カタログ](phase2_catalog.md) に沿い、**有名フラクタル 10 種**がメニューから選べる。
+- [ ] [Phase 2 カタログ](phase2_catalog.md) に沿い、**有名フラクタル 8 種**がメニューから選べる。
 - [ ] 各項目に**通称・メニューラベル**が付き、意図したパターンが深さを変えても破綻しにくい（必要なら推奨 `depth` 範囲をドキュメントとコメントで明記）。

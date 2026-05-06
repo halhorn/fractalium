@@ -12,11 +12,9 @@ use crate::state::{FractalState, Line, Replica};
 pub enum FractalPreset {
     SierpinskiTriangle,
     KochCurve,
-    CantorSet,
     Vicsek,
     HeighwayDragon,
     LevyCCurve,
-    BinaryTree,
     SierpinskiCarpet,
     PythagorasTree,
     SierpinskiHexagon,
@@ -26,11 +24,9 @@ impl FractalPreset {
     pub const ALL: &'static [FractalPreset] = &[
         FractalPreset::SierpinskiTriangle,
         FractalPreset::KochCurve,
-        FractalPreset::CantorSet,
         FractalPreset::Vicsek,
         FractalPreset::HeighwayDragon,
         FractalPreset::LevyCCurve,
-        FractalPreset::BinaryTree,
         FractalPreset::SierpinskiCarpet,
         FractalPreset::PythagorasTree,
         FractalPreset::SierpinskiHexagon,
@@ -40,11 +36,9 @@ impl FractalPreset {
         match self {
             FractalPreset::SierpinskiTriangle => "Sierpiński triangle",
             FractalPreset::KochCurve => "Koch curve",
-            FractalPreset::CantorSet => "Cantor set (line)",
             FractalPreset::Vicsek => "Vicsek (fractal cross)",
             FractalPreset::HeighwayDragon => "Heighway dragon",
             FractalPreset::LevyCCurve => "Lévy C curve",
-            FractalPreset::BinaryTree => "Binary tree",
             FractalPreset::SierpinskiCarpet => "Sierpiński carpet",
             FractalPreset::PythagorasTree => "Pythagoras tree",
             FractalPreset::SierpinskiHexagon => "Sierpiński hexagon",
@@ -56,11 +50,9 @@ impl FractalPreset {
         match self {
             FractalPreset::SierpinskiTriangle => sierpinski_triangle(),
             FractalPreset::KochCurve => koch_curve(),
-            FractalPreset::CantorSet => cantor_set(),
             FractalPreset::Vicsek => vicsek(),
             FractalPreset::HeighwayDragon => heighway_dragon(),
             FractalPreset::LevyCCurve => levy_c(),
-            FractalPreset::BinaryTree => binary_tree(),
             FractalPreset::SierpinskiCarpet => sierpinski_carpet(),
             FractalPreset::PythagorasTree => pythagoras_tree(),
             FractalPreset::SierpinskiHexagon => sierpinski_hexagon(),
@@ -78,7 +70,6 @@ impl FractalPreset {
         match key.as_str() {
             "pythagoras" | "pythagorastree" => Some(Self::PythagorasTree),
             "heighway" | "heighwaydragon" | "dragon" => Some(Self::HeighwayDragon),
-            "binary" | "binarytree" => Some(Self::BinaryTree),
             _ => Self::ALL.iter().copied().find(|&p| {
                 let label_key: String = p
                     .label()
@@ -166,22 +157,6 @@ fn koch_curve() -> FractalState {
     state(BaseShapePreset::Segment.lines(), replicas, 6, false)
 }
 
-fn cantor_set() -> FractalState {
-    let replicas = vec![
-        Replica {
-            translation: Vec2::new(-2.0 / 3.0, 0.0),
-            rotation: 0.0,
-            scale: 1.0 / 3.0,
-        },
-        Replica {
-            translation: Vec2::new(2.0 / 3.0, 0.0),
-            rotation: 0.0,
-            scale: 1.0 / 3.0,
-        },
-    ];
-    state(BaseShapePreset::Segment.lines(), replicas, 8, false)
-}
-
 fn vicsek() -> FractalState {
     let s = 1.0 / 3.0;
     let u = 2.0 / 3.0;
@@ -252,31 +227,6 @@ fn levy_c() -> FractalState {
     state(BaseShapePreset::Segment.lines(), replicas, 12, false)
 }
 
-/// 幹＋左右枝の相似 IFS（パラメータは見た目優先で調整）。
-fn binary_tree() -> FractalState {
-    let theta: f32 = 0.47;
-    let s = 0.58;
-    let tx = s * theta.sin();
-    let ty = 1.0 - s * theta.cos();
-    let replicas = vec![
-        Replica {
-            translation: Vec2::new(tx, ty),
-            rotation: theta,
-            scale: s,
-        },
-        Replica {
-            translation: Vec2::new(-tx, ty),
-            rotation: -theta,
-            scale: s,
-        },
-    ];
-    let base = vec![Line {
-        a: Vec2::new(0.0, -1.0),
-        b: Vec2::new(0.0, 1.0),
-    }];
-    state(base, replicas, 8, false)
-}
-
 fn sierpinski_carpet() -> FractalState {
     let s = 1.0 / 3.0;
     let u = 2.0 / 3.0;
@@ -326,7 +276,7 @@ fn sierpinski_carpet() -> FractalState {
 }
 
 /// ピタゴラスの木: 斜辺を種とする直角三角形の 2 相似 IFS（頂点 (0,h)、h>1 で Heighway より立ち上がる）。
-/// 途中世代も描くと枝分かれが読みやすい。
+/// 既定は深さ 12・全世代表示で枝の張り方を追いやすくする。
 fn pythagoras_tree() -> FractalState {
     let h: f32 = 1.16;
     let s = (1.0 + h * h).sqrt() * 0.5;
@@ -348,8 +298,8 @@ fn pythagoras_tree() -> FractalState {
     state(
         BaseShapePreset::Segment.lines(),
         replicas,
-        7,
-        false,
+        12,
+        true,
     )
 }
 
