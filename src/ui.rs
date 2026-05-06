@@ -1,4 +1,4 @@
-//! 右側のパラメータパネル（egui）と左側ペイン（Base Shape / Placement）の描画、
+//! 右側のパラメータパネル（egui）と左側ペイン（Seed / Placement）の描画、
 //! および各カメラへのビューポート分配を提供するモジュール。
 //!
 //! 幅 700px 以上: 左サイドパネル（Undo/Snap を含む操作バー + Edit + Placement）+ 中央 Result + 右パラメータパネル。
@@ -23,14 +23,14 @@ use crate::state::{
 use crate::toast::EguiToast;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
-/// ナローレイアウトの + / - 用。インタラクト高さに対して少しだけ幅を足す。
+/// ナローレイアウトの + / - 用。高さはインタラクト高さ、幅はワイド用より詰めてヘッダに収める。
 fn step_glyph_button(ui: &mut egui::Ui, label: &'static str) -> egui::Response {
     let h = ui.spacing().interact_size.y;
-    let w = h + 14.0;
+    let w = (h + 14.0) * 0.75;
     ui.add_sized(egui::vec2(w, h), egui::Button::new(label).small())
 }
 
-/// Base Shape ブロックのヘッダ右側: **[Shape] [-] [Clear]**（ワイド・ナロー共通）。
+/// Seed ブロックのヘッダ右側: **[Shape] [-] [Clear]**（ワイド・ナロー共通）。
 fn base_shape_header_buttons(
     ui: &mut egui::Ui,
     state: &mut FractalState,
@@ -183,7 +183,7 @@ fn layout_wide(
         });
     let central_right_x = right_resp.response.rect.min.x;
 
-    // Left: Base Shape + Placement
+    // Left: Seed + Placement
     let side = (win_h / 3.0).max(80.0);
     let left_panel_w = side + 2.0 * 8.0 + 6.0;
 
@@ -197,7 +197,7 @@ fn layout_wide(
             ui.separator();
             global_controls_bar(ui, state, undo_stack, toast);
             ui.separator();
-            let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
+            let edit_rect = show_canvas_block(ui, "Seed", |ui| {
                 base_shape_header_buttons(ui, state, draw_state, undo_stack, false);
             });
             ui.add_space(4.0);
@@ -298,7 +298,7 @@ fn layout_narrow(
             let mut placement_rect = egui::Rect::NOTHING;
             ui.columns(2, |cols| {
                 cols[0].set_max_width(half_w);
-                edit_rect = show_canvas_block(&mut cols[0], "Base Shape", |ui| {
+                edit_rect = show_canvas_block(&mut cols[0], "Seed", |ui| {
                     base_shape_header_buttons(ui, state, draw_state, undo_stack, true);
                 });
                 cols[1].set_max_width(half_w);
