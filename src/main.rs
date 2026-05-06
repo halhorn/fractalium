@@ -64,6 +64,21 @@ fn initial_fractal_state() -> FractalState {
     s
 }
 
+#[cfg(target_arch = "wasm32")]
+fn hide_web_loading_overlay() {
+    let Some(win) = web_sys::window() else {
+        return;
+    };
+    let Some(doc) = win.document() else {
+        return;
+    };
+    let Some(el) = doc.get_element_by_id("fractalium-loading") else {
+        return;
+    };
+    let _ = el.set_attribute("hidden", "");
+    let _ = el.set_attribute("aria-busy", "false");
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -113,6 +128,9 @@ fn setup(mut commands: Commands, mut egui_global: ResMut<EguiGlobalSettings>) {
     spawn_egui_camera(&mut commands);
     spawn_canvas_decor(&mut commands, edit_layer());
     spawn_canvas_decor(&mut commands, placement_layer());
+
+    #[cfg(target_arch = "wasm32")]
+    hide_web_loading_overlay();
 }
 
 /// Edit / Placement / Result それぞれのキャンバスを描画する 2D カメラを生成する。

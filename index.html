@@ -31,9 +31,42 @@
             -webkit-touch-callout: none;
             user-select: none;
         }
+        #fractalium-loading {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            background: #141418;
+            color: rgba(255, 255, 255, 0.72);
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            font-size: 0.9rem;
+            letter-spacing: 0.02em;
+        }
+        #fractalium-loading[hidden] {
+            display: none;
+        }
+        #fractalium-loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.12);
+            border-top-color: rgba(130, 170, 255, 0.95);
+            border-radius: 50%;
+            animation: fractalium-spin 0.75s linear infinite;
+        }
+        @keyframes fractalium-spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+    <div id="fractalium-loading" aria-busy="true" aria-live="polite" aria-label="Loading">
+        <div class="spinner" role="presentation"></div>
+        <span>Loading…</span>
+    </div>
     <canvas id="fractalium-canvas"></canvas>
     <link data-trunk rel="rust" data-cargo-features="webgl2" data-wasm-opt="z"/>
 </body>
