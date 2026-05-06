@@ -510,10 +510,6 @@ fn global_controls_bar(
                         Ok(token) => match share::share_url_from_token(&token) {
                             Ok(url) => {
                                 ui.ctx().copy_text(url);
-                                #[cfg(target_arch = "wasm32")]
-                                {
-                                    let _ = share::set_location_share_token(&token);
-                                }
                                 toast.show(ui.ctx(), "Link Copied");
                             }
                             Err(e) => bevy::log::warn!("share URL: {e}"),

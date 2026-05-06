@@ -11,53 +11,36 @@ use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 
 use crate::result_layer;
+use crate::share::PendingShareUrlSync;
 use crate::state::{FractalState, Line, Replica};
+
+/// `PostUpdate` 内でフラクタルメッシュ更新の前後関係を決める（共有 URL 同期より先に実行する）。
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum FractalPostUpdateSet {
+    UpdateMesh,
+}
 
 /// Result キャンバスへフラクタルを描画する一連のシステムを登録するプラグイン。
 pub struct FractalPlugin;
 
 impl Plugin for FractalPlugin {
     fn build(&self, app: &mut App) {
+        app.configure_sets(PostUpdate, FractalPostUpdateSet::UpdateMesh);
         app.add_systems(Startup, setup_fractal_mesh)
             // PostUpdate で実行することで、同フレームの Update（drag 確定）・
             // EguiPrimaryContextPass（DragValue 操作）の変更を即座に反映する。
-            .add_systems(PostUpdate, update_fractal_mesh);
+            .add_systems(
+                PostUpdate,
+                update_fractal_mesh.in_set(FractalPostUpdateSet::UpdateMesh),
+            );
     }
 }
 
-/// フラクタル描画用 Mesh Entity を識別するマーカー。
-#[derive(Component)]
-struct FractalMesh;
-
-/// HSL 色相からリニア RGBA 配列を生成する。彩度・輝度は固定。
-fn hue_to_linear_rgba(hue: f32) -> [f32; 4] {
-    LinearRgba::from(Hsla::new(hue % 360.0, 0.88, 0.58, 1.0)).to_f32_array()
-}
-
-/// Result パネルの depth=1 親と同じ色（全レプリカを均等に色相分割）。
-pub fn result_replica_color(i: usize, total: usize) -> LinearRgba {
-    let hue = if total == 0 { 0.0 } else { i as f32 * 360.0 / total as f32 };
-    LinearRgba::from(Hsla::new(hue, 0.88, 0.58, 1.0))
-}
-
-/// Startup 時に空の LineList Mesh と ColorMaterial を持つ Entity を生成する。
-fn setup_fractal_mesh(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    let mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD);
-    commands.spawn((
-        FractalMesh,
-        Mesh2d(meshes.add(mesh)),
-        MeshMaterial2d(materials.add(ColorMaterial::default())),
-        result_layer(),
-    ));
-}
-
 /// FractalState が変化したフレームのみ Mesh の頂点バッファを更新する。
+/// メッシュ書き込み成功後にのみ WASM 向け共有 URL 同期フラグを立てる。
 fn update_fractal_mesh(
     state: Res<FractalState>,
+    mut pending_share: ResMut<PendingShareUrlSync>,
     mesh_q: Query<&Mesh2d, With<FractalMesh>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -89,6 +72,37 @@ fn update_fractal_mesh(
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    pending_share.0 = true;
+}
+
+/// フラクタル描画用 Mesh Entity を識別するマーカー。
+#[derive(Component)]
+struct FractalMesh;
+
+/// HSL 色相からリニア RGBA 配列を生成する。彩度・輝度は固定。
+fn hue_to_linear_rgba(hue: f32) -> [f32; 4] {
+    LinearRgba::from(Hsla::new(hue % 360.0, 0.88, 0.58, 1.0)).to_f32_array()
+}
+
+/// Result パネルの depth=1 親と同じ色（全レプリカを均等に色相分割）。
+pub fn result_replica_color(i: usize, total: usize) -> LinearRgba {
+    let hue = if total == 0 { 0.0 } else { i as f32 * 360.0 / total as f32 };
+    LinearRgba::from(Hsla::new(hue, 0.88, 0.58, 1.0))
+}
+
+/// Startup 時に空の LineList Mesh と ColorMaterial を持つ Entity を生成する。
+fn setup_fractal_mesh(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD);
+    commands.spawn((
+        FractalMesh,
+        Mesh2d(meshes.add(mesh)),
+        MeshMaterial2d(materials.add(ColorMaterial::default())),
+        result_layer(),
+    ));
 }
 
 /// フラクタルを再帰的に展開して頂点座標と色を `positions` / `colors` に積む。

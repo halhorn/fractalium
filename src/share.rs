@@ -194,14 +194,49 @@ pub fn set_location_share_token(token: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Result メッシュを実際に更新したフレームだけ立て、`flush_share_url_after_fractal_mesh` が URL を同期する。
+#[derive(Resource, Default)]
+pub(crate) struct PendingShareUrlSync(pub bool);
+
+#[cfg(target_arch = "wasm32")]
+fn flush_share_url_after_fractal_mesh(
+    state: Res<FractalState>,
+    mut pending: ResMut<PendingShareUrlSync>,
+    mut last_token: Local<Option<String>>,
+) {
+    if !pending.0 {
+        return;
+    }
+    pending.0 = false;
+
+    let Ok(token) = encode_state(&state) else {
+        return;
+    };
+    if last_token.as_deref() == Some(token.as_str()) {
+        return;
+    }
+    if parse_location_hash_token().as_deref() == Some(token.as_str()) {
+        *last_token = Some(token);
+        return;
+    }
+    if set_location_share_token(&token).is_ok() {
+        *last_token = Some(token);
+    }
+}
+
 pub struct SharePlugin;
 
 impl Plugin for SharePlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<PendingShareUrlSync>();
         #[cfg(target_arch = "wasm32")]
-        app.add_systems(Startup, hydrate_from_url);
-        #[cfg(not(target_arch = "wasm32"))]
-        let _ = app;
+        {
+            app.add_systems(Startup, hydrate_from_url);
+            app.add_systems(
+                PostUpdate,
+                flush_share_url_after_fractal_mesh.after(crate::fractal::FractalPostUpdateSet::UpdateMesh),
+            );
+        }
     }
 }
 
