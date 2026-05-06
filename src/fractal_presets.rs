@@ -18,6 +18,9 @@ pub enum FractalPreset {
     SierpinskiCarpet,
     PythagorasTree,
     SierpinskiHexagon,
+    SierpinskiStar,
+    BinaryFractalTree,
+    Terdragon,
 }
 
 impl FractalPreset {
@@ -30,6 +33,9 @@ impl FractalPreset {
         FractalPreset::SierpinskiCarpet,
         FractalPreset::PythagorasTree,
         FractalPreset::SierpinskiHexagon,
+        FractalPreset::SierpinskiStar,
+        FractalPreset::BinaryFractalTree,
+        FractalPreset::Terdragon,
     ];
 
     pub fn label(self) -> &'static str {
@@ -42,6 +48,9 @@ impl FractalPreset {
             FractalPreset::SierpinskiCarpet => "Sierpiński carpet",
             FractalPreset::PythagorasTree => "Pythagoras tree",
             FractalPreset::SierpinskiHexagon => "Sierpiński hexagon",
+            FractalPreset::SierpinskiStar => "Sierpiński pentagram",
+            FractalPreset::BinaryFractalTree => "Binary fractal tree",
+            FractalPreset::Terdragon => "Terdragon curve",
         }
     }
 
@@ -56,6 +65,9 @@ impl FractalPreset {
             FractalPreset::SierpinskiCarpet => sierpinski_carpet(),
             FractalPreset::PythagorasTree => pythagoras_tree(),
             FractalPreset::SierpinskiHexagon => sierpinski_hexagon(),
+            FractalPreset::SierpinskiStar => sierpinski_star(),
+            FractalPreset::BinaryFractalTree => binary_fractal_tree(),
+            FractalPreset::Terdragon => terdragon(),
         }
     }
 
@@ -83,6 +95,12 @@ impl FractalPreset {
     }
 }
 
+/// `Replica::apply` と同じ定義（反時計回りが正）で -90°。
+#[inline]
+fn rotate_neg_90(v: Vec2) -> Vec2 {
+    Vec2::new(v.y, -v.x)
+}
+
 fn state(
     base_shape: Vec<Line>,
     replicas: Vec<Replica>,
@@ -106,6 +124,14 @@ fn triangle_vertices() -> [Vec2; 3] {
 
 fn hexagon_vertices() -> Vec<Vec2> {
     BaseShapePreset::Hexagon
+        .lines()
+        .iter()
+        .map(|l| l.a)
+        .collect()
+}
+
+fn pentagon_vertices() -> Vec<Vec2> {
+    BaseShapePreset::Pentagon
         .lines()
         .iter()
         .map(|l| l.a)
@@ -315,4 +341,79 @@ fn sierpinski_hexagon() -> FractalState {
         })
         .collect();
     state(BaseShapePreset::Hexagon.lines(), replicas, 5, false)
+}
+
+/// 正五角星（ペンタグラム）の各先端方向へ 1/3 縮小。
+fn sierpinski_star() -> FractalState {
+    let v = pentagon_vertices();
+    let s = 1.0 / 3.0;
+    let replicas: Vec<Replica> = v
+        .into_iter()
+        .map(|p| Replica {
+            translation: p * (2.0 / 3.0),
+            rotation: 0.0,
+            scale: s,
+        })
+        .collect();
+    state(BaseShapePreset::Star.lines(), replicas, 5, false)
+}
+
+#[inline]
+fn flip_y(v: Vec2) -> Vec2 {
+    Vec2::new(v.x, -v.y)
+}
+
+/// 種線分の中点から ±45° に二分枝する対称木。全体を -90° 回して幹が +y（上向き）になる。
+/// 各写像は中点を固定点にするよう並進を付ける。
+fn binary_fractal_tree() -> FractalState {
+    let s = 0.52_f32;
+    let theta = FRAC_PI_4;
+    let (sin_t, cos_t) = theta.sin_cos();
+    let t0 = Vec2::new(s * cos_t, s * sin_t);
+    let t1 = Vec2::new(s * cos_t, -s * sin_t);
+    // x 軸鏡映と IFS の整合: 並進の y を反転し、回転角は符号反転。
+    let replicas = vec![
+        Replica {
+            translation: flip_y(rotate_neg_90(t0)),
+            rotation: -theta,
+            scale: s,
+        },
+        Replica {
+            translation: flip_y(rotate_neg_90(t1)),
+            rotation: theta,
+            scale: s,
+        },
+    ];
+    let base: Vec<Line> = BaseShapePreset::Segment
+        .lines()
+        .into_iter()
+        .map(|l| Line {
+            a: flip_y(rotate_neg_90(l.b)),
+            b: flip_y(rotate_neg_90(l.a)),
+        })
+        .collect();
+    state(base, replicas, 11, true)
+}
+
+/// Davis–Knuth テドラゴンの標準 3 写像 IFS（`f1(z)=z/2`, `f2(z)=e^{iπ/3}z/2+1/2`, 第三は鏡像）。
+fn terdragon() -> FractalState {
+    let half = 0.5_f32;
+    let replicas = vec![
+        Replica {
+            translation: Vec2::ZERO,
+            rotation: 0.0,
+            scale: half,
+        },
+        Replica {
+            translation: Vec2::new(half, 0.0),
+            rotation: FRAC_PI_3,
+            scale: half,
+        },
+        Replica {
+            translation: Vec2::new(half, 0.0),
+            rotation: -FRAC_PI_3,
+            scale: half,
+        },
+    ];
+    state(BaseShapePreset::Segment.lines(), replicas, 8, false)
 }
