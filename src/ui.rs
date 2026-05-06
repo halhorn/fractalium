@@ -205,15 +205,19 @@ fn layout_wide(
                 app_title_bar_contents(ui);
             });
             ui.separator();
-            global_controls_bar(
-                ui,
-                state,
-                draw_state,
-                placement,
-                undo_stack,
-                toast,
-                pending_result_fit,
-            );
+            egui::Frame::default()
+                .inner_margin(egui::Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    global_controls_bar(
+                        ui,
+                        state,
+                        draw_state,
+                        placement,
+                        undo_stack,
+                        toast,
+                        pending_result_fit,
+                    );
+                });
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Seed", |ui| {
                 base_shape_header_buttons(ui, state, draw_state, undo_stack, false);
