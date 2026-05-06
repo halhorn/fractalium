@@ -1,12 +1,16 @@
 //! 基図形（Base Shape）用の正規化座標プリセット。
-//! 座標は `FractalState` と同じ [-1, 1]² を前提とし、一様スケールで可視域に収める。
+//! 座標は `FractalState` と同じ [-1, 1]² を前提とし、はみ出さない範囲で最大サイズにする。
 
 use bevy::prelude::Vec2;
 
 use crate::state::Line;
 
-/// 形状が収まるよう共有する外接円半径（頂点用）。
-const R: f32 = 0.38;
+/// 外心が原点の図形（線分・正三角形・正多角形・星）で共有する頂点の外接円半径。
+/// 単位正方の内接円と一致するので、頂点座標は常に [-1, 1] に収まる。
+const CIRCUMRADIUS: f32 = 1.0;
+
+/// 軸そろえ正方形の中心から辺までの距離（半辺）。`±1` の辺に接する。
+const SQUARE_HALF_SIDE: f32 = 1.0;
 
 /// 正 n 角形の頂点を、下辺が水平になる向きで並べる（最初の頂点が最下点）。
 fn regular_polygon_vertices(n: usize) -> Vec<Vec2> {
@@ -14,7 +18,7 @@ fn regular_polygon_vertices(n: usize) -> Vec<Vec2> {
     (0..n as usize)
         .map(|k| {
             let a = -std::f32::consts::FRAC_PI_2 + (k as f32) * std::f32::consts::TAU / n;
-            Vec2::new(R * a.cos(), R * a.sin())
+            Vec2::new(CIRCUMRADIUS * a.cos(), CIRCUMRADIUS * a.sin())
         })
         .collect()
 }
@@ -70,16 +74,17 @@ impl BaseShapePreset {
     pub fn lines(self) -> Vec<Line> {
         match self {
             BaseShapePreset::Segment => vec![Line {
-                a: Vec2::new(-R, 0.0),
-                b: Vec2::new(R, 0.0),
+                a: Vec2::new(-CIRCUMRADIUS, 0.0),
+                b: Vec2::new(CIRCUMRADIUS, 0.0),
             }],
             BaseShapePreset::Triangle => {
                 // 正三角形・下辺水平・外心が原点
-                let v0 = Vec2::new(0.0, R);
+                let r = CIRCUMRADIUS;
+                let v0 = Vec2::new(0.0, r);
                 let a = 7.0 * std::f32::consts::FRAC_PI_6; // 210°
-                let v1 = Vec2::new(R * a.cos(), R * a.sin());
+                let v1 = Vec2::new(r * a.cos(), r * a.sin());
                 let b = 11.0 * std::f32::consts::FRAC_PI_6; // 330°
-                let v2 = Vec2::new(R * b.cos(), R * b.sin());
+                let v2 = Vec2::new(r * b.cos(), r * b.sin());
                 vec![
                     Line { a: v0, b: v1 },
                     Line { a: v1, b: v2 },
@@ -87,7 +92,7 @@ impl BaseShapePreset {
                 ]
             }
             BaseShapePreset::Square => {
-                let s = R * std::f32::consts::FRAC_1_SQRT_2;
+                let s = SQUARE_HALF_SIDE;
                 let bl = Vec2::new(-s, -s);
                 let br = Vec2::new(s, -s);
                 let tr = Vec2::new(s, s);
@@ -100,7 +105,7 @@ impl BaseShapePreset {
                 ]
             }
             BaseShapePreset::Pentagon => {
-                let v = regular_polygon_vertices(5);
+                let v: Vec<Vec2> = regular_polygon_vertices(5).into_iter().map(|p| -p).collect();
                 cycle_edges(&v)
             }
             BaseShapePreset::Hexagon => {
@@ -108,7 +113,7 @@ impl BaseShapePreset {
                 cycle_edges(&v)
             }
             BaseShapePreset::Star => {
-                let v = regular_polygon_vertices(5);
+                let v: Vec<Vec2> = regular_polygon_vertices(5).into_iter().map(|p| -p).collect();
                 if v.len() != 5 {
                     return vec![];
                 }
@@ -119,11 +124,12 @@ impl BaseShapePreset {
                     .collect()
             }
             BaseShapePreset::LShape => {
-                let a = 0.35;
+                // 角を原点に、+x へ水平・+y へ垂直の L。
+                let a = CIRCUMRADIUS;
                 vec![
                     Line {
-                        a: Vec2::new(-a, 0.0),
-                        b: Vec2::ZERO,
+                        a: Vec2::ZERO,
+                        b: Vec2::new(a, 0.0),
                     },
                     Line {
                         a: Vec2::ZERO,
