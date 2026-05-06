@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use crate::edit::DrawState;
 use crate::state::{
-    BaseShape, FractalState, Line, Replica, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    BaseShape, FractalState, Line, Replica, FRACTAL_DEPTH_HARD_CAP, REPLICA_SCALE_MAX,
+    REPLICA_SCALE_MIN,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -16,7 +17,8 @@ use crate::state::{PendingResultCameraFit, PlacementDrag, PlacementState, UndoSt
 const SHARE_VERSION: u32 = 1;
 const MAX_LINES: usize = 4096;
 const MAX_REPLICAS: usize = 64;
-const MAX_DEPTH: u32 = 12;
+/// 共有ペイロードで許容する `depth` の上限（再帰スタック安全性。実際の操作上限は `fractal::max_depth_for_budget` 側の予算）。
+pub const MAX_DEPTH: u32 = FRACTAL_DEPTH_HARD_CAP;
 
 #[derive(Serialize, Deserialize)]
 struct FractalSnapshot {
@@ -135,9 +137,10 @@ pub fn decode_and_apply(token: &str, state: &mut FractalState) -> Result<(), Str
     )
     .map_err(|_| "invalid base64".to_string())?;
     let snap: FractalSnapshot = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    let new_state = snap.try_into_fractal_state()?;
-    *state = new_state;
-    Ok(())
+        let new_state = snap.try_into_fractal_state()?;
+        *state = new_state;
+        crate::fractal::clamp_fractal_state_depth(state);
+        Ok(())
 }
 
 pub fn share_url_from_token(token: &str) -> Result<String, String> {

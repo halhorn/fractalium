@@ -13,7 +13,9 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::edit::DrawState;
-use crate::fractal::result_replica_color;
+use crate::fractal::{
+    clamp_fractal_state_depth, max_depth_for_budget, result_replica_color,
+};
 use crate::fractal_presets::FractalPreset;
 use crate::seed_shape::BaseShapePreset;
 use crate::share;
@@ -410,7 +412,18 @@ fn paint_result_corner_controls(
             let framed = egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
-                    ui.label(egui::RichText::new("Depth").small());
+                    ui.label(egui::RichText::new("Depth").small())
+                        .on_hover_text(
+                            "メッシュの線分数（基図形の線数 × 末端または全世代の描画回数）と再帰ノード数から見積もり、\
+その予算を超える深さは選べません（WASM ではより厳しめ）。",
+                        );
+
+                    let depth_cap = max_depth_for_budget(
+                        state.base_shape.lines.len(),
+                        state.replicas.len(),
+                        state.show_all_generations,
+                    );
+                    let range = 1..=depth_cap;
 
                     let h = ui.spacing().interact_size.y;
                     const RESERVE_OTHER: f32 = 284.0;
@@ -419,9 +432,9 @@ fn paint_result_corner_controls(
                     let mut depth = state.depth;
                     let slider_r = ui.add_sized(
                         egui::vec2(slider_w, h),
-                        egui::Slider::new(&mut depth, 1..=12).show_value(false),
+                        egui::Slider::new(&mut depth, range.clone()).show_value(false),
                     );
-                    ui.add(egui::DragValue::new(&mut depth).range(1..=12).speed(1.0));
+                    ui.add(egui::DragValue::new(&mut depth).range(range).speed(1.0));
 
                     let pointer_down = ctx.input(|i| i.pointer.primary_down());
                     let phantom_slider = slider_r.dragged() && !pointer_down;
@@ -435,6 +448,7 @@ fn paint_result_corner_controls(
                     }
                     if ui.add(gen_btn).clicked() {
                         state.show_all_generations = !state.show_all_generations;
+                        clamp_fractal_state_depth(state);
                     }
                 });
             });
@@ -491,6 +505,7 @@ fn global_controls_bar(
                         let snap = state.snap_grid;
                         *state = preset.build();
                         state.snap_grid = snap;
+                        clamp_fractal_state_depth(state);
                         *draw_state = DrawState::Idle;
                         placement.selected = None;
                         placement.drag = PlacementDrag::Idle;

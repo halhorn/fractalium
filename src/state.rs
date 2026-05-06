@@ -47,6 +47,13 @@ pub struct Line {
 pub const REPLICA_SCALE_MIN: f32 = 0.05;
 pub const REPLICA_SCALE_MAX: f32 = 2.0;
 
+/// 共有 URL と UI が受け付ける `depth` の絶対上限。`collect_fractal_segments` はこの回数だけ再帰するため、
+/// WASM の狭いコールスタックを想定してネイティブより低めにする。
+#[cfg(target_arch = "wasm32")]
+pub const FRACTAL_DEPTH_HARD_CAP: u32 = 512;
+#[cfg(not(target_arch = "wasm32"))]
+pub const FRACTAL_DEPTH_HARD_CAP: u32 = 2048;
+
 /// 1 つの複製を表す相似変換（平行移動・回転・一様スケール）。
 /// 適用順は scale → rotate → translate。
 #[derive(Clone, Copy)]

@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
 use edit::EditPlugin;
-use fractal::FractalPlugin;
+use fractal::{clamp_fractal_state_depth, FractalPlugin};
 use fractal_presets::FractalPreset;
 use placement::PlacementPlugin;
 use share::SharePlugin;
@@ -51,12 +51,17 @@ pub fn result_layer() -> RenderLayers {
 }
 
 fn initial_fractal_state() -> FractalState {
-    if let Ok(raw) = std::env::var("FRACTALIUM_BOOT_PRESET") {
+    let mut s = if let Ok(raw) = std::env::var("FRACTALIUM_BOOT_PRESET") {
         if let Some(preset) = FractalPreset::from_boot_token(&raw) {
-            return preset.build();
+            preset.build()
+        } else {
+            FractalState::default()
         }
-    }
-    FractalState::default()
+    } else {
+        FractalState::default()
+    };
+    clamp_fractal_state_depth(&mut s);
+    s
 }
 
 fn main() {
