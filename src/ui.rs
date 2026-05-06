@@ -14,6 +14,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::edit::DrawState;
 use crate::fractal::result_replica_color;
+use crate::presets::BaseShapePreset;
 use crate::share;
 use crate::state::{
     CanvasLayout, FractalState, PlacementState, Replica, ScreenRect, UiLayout, UndoStack,
@@ -27,6 +28,50 @@ fn step_glyph_button(ui: &mut egui::Ui, label: &'static str) -> egui::Response {
     let h = ui.spacing().interact_size.y;
     let w = h + 14.0;
     ui.add_sized(egui::vec2(w, h), egui::Button::new(label).small())
+}
+
+/// Base Shape ブロックのヘッダ右側: **[Shape] [-] [Clear]**（ワイド・ナロー共通）。
+fn base_shape_header_buttons(
+    ui: &mut egui::Ui,
+    state: &mut FractalState,
+    draw_state: &mut DrawState,
+    undo_stack: &mut UndoStack,
+    minus_compact: bool,
+) {
+    ui.menu_button("Shape", |ui| {
+        ui.set_min_width(160.0);
+        for &preset in BaseShapePreset::ALL {
+            if ui.button(preset.label()).clicked() {
+                undo_stack.push(state.clone());
+                state.base_shape.lines.extend(preset.lines());
+                ui.close();
+            }
+        }
+    });
+
+    let can_del = matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
+    if minus_compact {
+        let minus = ui.add_enabled_ui(can_del, |ui| step_glyph_button(ui, "-"));
+        if minus.inner.clicked()
+            && let DrawState::Selected(idx) = *draw_state
+        {
+            undo_stack.push(state.clone());
+            state.base_shape.lines.remove(idx);
+            *draw_state = DrawState::Idle;
+        }
+    } else if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked()
+        && let DrawState::Selected(idx) = *draw_state
+    {
+        undo_stack.push(state.clone());
+        state.base_shape.lines.remove(idx);
+        *draw_state = DrawState::Idle;
+    }
+
+    if ui.small_button("Clear").clicked() {
+        undo_stack.push(state.clone());
+        state.base_shape.lines.clear();
+        *draw_state = DrawState::Idle;
+    }
 }
 
 pub struct UiPlugin;
@@ -153,20 +198,7 @@ fn layout_wide(
             global_controls_bar(ui, state, undo_stack, toast);
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Base Shape", |ui| {
-                let can_del = matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
-                let minus = ui.add_enabled(can_del, egui::Button::new("-").small());
-                if minus.clicked() {
-                    if let DrawState::Selected(idx) = *draw_state {
-                        undo_stack.push(state.clone());
-                        state.base_shape.lines.remove(idx);
-                        *draw_state = DrawState::Idle;
-                    }
-                }
-                if ui.small_button("Clear").clicked() {
-                    undo_stack.push(state.clone());
-                    state.base_shape.lines.clear();
-                    *draw_state = DrawState::Idle;
-                }
+                base_shape_header_buttons(ui, state, draw_state, undo_stack, false);
             });
             ui.add_space(4.0);
             let placement_rect = show_canvas_block(ui, "Placement", |ui| {
@@ -267,16 +299,7 @@ fn layout_narrow(
             ui.columns(2, |cols| {
                 cols[0].set_max_width(half_w);
                 edit_rect = show_canvas_block(&mut cols[0], "Base Shape", |ui| {
-                    let can_del =
-                        matches!(*draw_state, DrawState::Selected(i) if i < state.base_shape.lines.len());
-                    let minus = ui.add_enabled_ui(can_del, |ui| step_glyph_button(ui, "-"));
-                    if minus.inner.clicked() {
-                        if let DrawState::Selected(idx) = *draw_state {
-                            undo_stack.push(state.clone());
-                            state.base_shape.lines.remove(idx);
-                            *draw_state = DrawState::Idle;
-                        }
-                    }
+                    base_shape_header_buttons(ui, state, draw_state, undo_stack, true);
                 });
                 cols[1].set_max_width(half_w);
                 placement_rect = show_canvas_block(&mut cols[1], "Placement", |ui| {

@@ -2,6 +2,7 @@ mod edit;
 mod fractal;
 mod grid;
 mod placement;
+mod presets;
 mod share;
 mod state;
 mod toast;
