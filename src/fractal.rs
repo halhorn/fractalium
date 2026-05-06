@@ -141,3 +141,61 @@ fn collect_fractal_segments(
         );
     }
 }
+
+/// Result キャンバスに描画される線分のワールド座標 AABB。描画ジオメトリが無いときは `None`。
+pub fn fractal_world_aabb(state: &FractalState) -> Option<(Vec2, Vec2)> {
+    let mut min = Vec2::splat(f32::MAX);
+    let mut max = Vec2::splat(f32::MIN);
+    let mut has = false;
+    fractal_bounds_recurse(
+        state.depth,
+        Replica::identity(),
+        &state.base_shape.lines,
+        &state.replicas,
+        &mut min,
+        &mut max,
+        &mut has,
+        state.show_all_generations,
+    );
+    has.then_some((min, max))
+}
+
+fn fractal_bounds_recurse(
+    depth: u32,
+    transform: Replica,
+    lines: &[Line],
+    replicas: &[Replica],
+    min: &mut Vec2,
+    max: &mut Vec2,
+    has: &mut bool,
+    show_all_generations: bool,
+) {
+    let is_leaf = depth <= 1 || replicas.is_empty();
+
+    if is_leaf || show_all_generations {
+        for line in lines {
+            for p in [transform.apply(line.a), transform.apply(line.b)] {
+                *min = min.min(p);
+                *max = max.max(p);
+                *has = true;
+            }
+        }
+    }
+
+    if is_leaf {
+        return;
+    }
+
+    for replica in replicas {
+        fractal_bounds_recurse(
+            depth - 1,
+            transform.compose(*replica),
+            lines,
+            replicas,
+            min,
+            max,
+            has,
+            show_all_generations,
+        );
+    }
+}

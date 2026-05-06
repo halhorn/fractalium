@@ -6,9 +6,10 @@ use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::fractal::fractal_world_aabb;
 use crate::state::{
-    CanvasLayout, DoubleTapZoomActive, FractalState, PlacementState, Replica, REPLICA_SCALE_MAX,
-    REPLICA_SCALE_MIN,
+    CanvasLayout, DoubleTapZoomActive, FractalState, PendingResultCameraFit, PlacementState,
+    Replica, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
 };
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
@@ -38,6 +39,15 @@ impl ZoomTowardsCursor for ResultCamera {
 const ZOOM_SPEED: f32 = 0.02;
 const ZOOM_MIN: f32 = 0.005;
 const ZOOM_MAX: f32 = 8.0;
+
+/// `main::normalized_projection` の `AutoMin` 値と一致させる（Result カメラの見える範囲計算用）。
+const RESULT_ORTHO_AUTOMIN: f32 = 2.0;
+/// 図形全体が入る最大ズームに対して、周囲に空ける量（境界の長辺に対する比率）。
+const RESULT_FIT_PADDING_RATIO: f32 = 0.06;
+/// Result 左上の Depth / Show generations オーバーレイに合わせ、フィット計算で使う有効高さから控える量（論理 px）。
+const RESULT_FIT_DEPTH_OVERLAY_STRIP_PX: f32 = 52.0;
+/// オーバーレイ直下に余白を残すため、図形中心を画面やや下へずらす（1 画面あたりのワールド高さに対する比率）。
+const RESULT_FIT_TOP_SCREEN_BIAS_FRAC: f32 = 0.035;
 
 /// ダブルタップ判定の最大時間間隔（秒）。
 const DOUBLE_TAP_TIME: f64 = 0.35;
@@ -555,4 +565,72 @@ fn handle_double_tap_zoom(
             dtap_state.last_tap_pos = pos;
         }
     }
+}
+
+/// [`main::normalized_projection`] と同じ AutoMin ルールで、ビューポートあたりの論理投影サイズ（ワールド単位ベース）を返す。
+fn ortho_automin_projection_size(viewport_w: f32, viewport_h: f32) -> (f32, f32) {
+    let mw = RESULT_ORTHO_AUTOMIN;
+    let mh = RESULT_ORTHO_AUTOMIN;
+    if viewport_w * mh > mw * viewport_h {
+        (viewport_w * mh / viewport_h, mh)
+    } else {
+        (mw, viewport_h * mw / viewport_w)
+    }
+}
+
+/// params_panel が Result のビューポートを更新した直後に実行し、保留中なら図形に合わせてズームと中心を付ける。
+pub fn fit_result_camera_if_requested(
+    mut pending: ResMut<PendingResultCameraFit>,
+    state: Res<FractalState>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut result_cam: Query<(&Camera, &mut Projection, &mut Transform), With<ResultCamera>>,
+) {
+    if !pending.0 {
+        return;
+    }
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, mut proj, mut tf)) = result_cam.single_mut() else {
+        return;
+    };
+    let Some(vp) = cam.viewport.as_ref() else {
+        return;
+    };
+    let sf = window.scale_factor();
+    let vw = vp.physical_size.x as f32 / sf;
+    let vh = vp.physical_size.y as f32 / sf;
+    if vw < 2.0 || vh < 2.0 {
+        return;
+    }
+
+    let vh_fit = (vh - RESULT_FIT_DEPTH_OVERLAY_STRIP_PX).max(48.0);
+    let (mut min_v, mut max_v) = match fractal_world_aabb(&state) {
+        Some(b) => b,
+        None => (Vec2::new(-1.0, -1.0), Vec2::new(1.0, 1.0)),
+    };
+    let span_w = (max_v.x - min_v.x).max(1e-6);
+    let span_h = (max_v.y - min_v.y).max(1e-6);
+    let pad = RESULT_FIT_PADDING_RATIO * span_w.max(span_h);
+    min_v -= Vec2::splat(pad);
+    max_v += Vec2::splat(pad);
+    let bw = (max_v.x - min_v.x).max(1e-6);
+    let bh = (max_v.y - min_v.y).max(1e-6);
+
+    let (proj_w, proj_h) = ortho_automin_projection_size(vw, vh_fit);
+    let scale_fit = (bw / proj_w).max(bh / proj_h).clamp(ZOOM_MIN, ZOOM_MAX);
+
+    let cx = (min_v.x + max_v.x) * 0.5;
+    let cy = (min_v.y + max_v.y) * 0.5;
+    // Y 上向き：カメラ中心を図形より少し上に置くと、図形は画面上でやや下へ寄り、左上 Depth 帯と重なりにくい。
+    let cy_biased = cy + RESULT_FIT_TOP_SCREEN_BIAS_FRAC * scale_fit * proj_h;
+
+    let Projection::Orthographic(ref mut ortho) = *proj else {
+        return;
+    };
+    ortho.scale = scale_fit;
+    tf.translation.x = cx;
+    tf.translation.y = cy_biased;
+
+    pending.0 = false;
 }

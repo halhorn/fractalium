@@ -11,7 +11,7 @@ use crate::state::{
 };
 
 #[cfg(target_arch = "wasm32")]
-use crate::state::{PlacementDrag, PlacementState, UndoStack};
+use crate::state::{PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack};
 
 const SHARE_VERSION: u32 = 1;
 const MAX_LINES: usize = 4096;
@@ -211,6 +211,7 @@ fn hydrate_from_url(
     mut undo: ResMut<UndoStack>,
     mut placement: ResMut<PlacementState>,
     mut draw_state: ResMut<DrawState>,
+    mut pending_fit: ResMut<PendingResultCameraFit>,
 ) {
     let Some(token) = parse_location_hash_token() else {
         return;
@@ -221,6 +222,7 @@ fn hydrate_from_url(
         placement.clipboard = None;
         placement.drag = PlacementDrag::Idle;
         *draw_state = DrawState::Idle;
+        pending_fit.0 = true;
     }
 }
 

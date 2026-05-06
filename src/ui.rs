@@ -18,11 +18,11 @@ use crate::fractal_presets::FractalPreset;
 use crate::seed_shape::BaseShapePreset;
 use crate::share;
 use crate::state::{
-    CanvasLayout, FractalState, PlacementDrag, PlacementState, Replica, ScreenRect, UiLayout,
-    UndoStack,
-    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, Replica,
+    ScreenRect, UiLayout, UndoStack, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
 };
 use crate::toast::EguiToast;
+use crate::view::fit_result_camera_if_requested;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
 /// ナローレイアウトの + / - 用。高さはインタラクト高さ、幅はワイド用より詰めてヘッダに収める。
@@ -81,7 +81,11 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EguiToast>()
-            .add_systems(EguiPrimaryContextPass, params_panel);
+            .init_resource::<PendingResultCameraFit>()
+            .add_systems(
+                EguiPrimaryContextPass,
+                (params_panel, fit_result_camera_if_requested).chain(),
+            );
     }
 }
 
@@ -95,6 +99,7 @@ fn params_panel(
     mut layout: ResMut<CanvasLayout>,
     mut ui_layout: ResMut<UiLayout>,
     mut toast: ResMut<EguiToast>,
+    mut pending_result_fit: ResMut<PendingResultCameraFit>,
     mut edit_cam: Query<
         &mut Camera,
         (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
@@ -128,6 +133,7 @@ fn params_panel(
             &mut placement,
             &mut ui_layout,
             &mut toast,
+            &mut pending_result_fit,
         )
     } else {
         layout_wide(
@@ -140,6 +146,7 @@ fn params_panel(
             &mut placement,
             &mut ui_layout,
             &mut toast,
+            &mut pending_result_fit,
         )
     };
 
@@ -175,6 +182,7 @@ fn layout_wide(
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
+    pending_result_fit: &mut PendingResultCameraFit,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
     let params_w = if ui_layout.params_collapsed { 28.0_f32 } else { 240.0_f32 };
@@ -197,7 +205,15 @@ fn layout_wide(
                 app_title_bar_contents(ui);
             });
             ui.separator();
-            global_controls_bar(ui, state, draw_state, placement, undo_stack, toast);
+            global_controls_bar(
+                ui,
+                state,
+                draw_state,
+                placement,
+                undo_stack,
+                toast,
+                pending_result_fit,
+            );
             ui.separator();
             let edit_rect = show_canvas_block(ui, "Seed", |ui| {
                 base_shape_header_buttons(ui, state, draw_state, undo_stack, false);
@@ -245,6 +261,7 @@ fn layout_narrow(
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
+    pending_result_fit: &mut PendingResultCameraFit,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
@@ -330,7 +347,15 @@ fn layout_narrow(
         .default_height(40.0)
         .max_height(108.0)
         .show(ctx, |ui| {
-            global_controls_bar(ui, state, draw_state, placement, undo_stack, toast);
+            global_controls_bar(
+                ui,
+                state,
+                draw_state,
+                placement,
+                undo_stack,
+                toast,
+                pending_result_fit,
+            );
         });
 
     let (edit_egui_rect, placement_egui_rect) = bottom_resp.inner;
@@ -427,6 +452,7 @@ fn global_controls_bar(
     placement: &mut PlacementState,
     undo_stack: &mut UndoStack,
     toast: &mut EguiToast,
+    pending_result_fit: &mut PendingResultCameraFit,
 ) {
     ui.add_space(4.0);
     let row_h = ui.spacing().interact_size.y;
@@ -464,6 +490,7 @@ fn global_controls_bar(
                         *draw_state = DrawState::Idle;
                         placement.selected = None;
                         placement.drag = PlacementDrag::Idle;
+                        pending_result_fit.0 = true;
                         ui.close();
                     }
                 }

@@ -142,6 +142,10 @@ pub struct CanvasLayout {
 #[derive(Resource, Default)]
 pub struct DoubleTapZoomActive(pub bool);
 
+/// URL からの復元やフルプリセット適用後、Result カメラを図形に合わせる。
+#[derive(Resource, Default)]
+pub struct PendingResultCameraFit(pub bool);
+
 /// UI レイアウト状態（パネルの折りたたみなど）を保持するリソース。
 #[derive(Resource)]
 pub struct UiLayout {
