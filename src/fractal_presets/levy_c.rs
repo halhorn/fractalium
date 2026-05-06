@@ -1,0 +1,25 @@
+use std::f32::consts::{FRAC_PI_4, SQRT_2};
+
+use bevy::prelude::Vec2;
+
+use crate::fractal_presets::common::state;
+use crate::seed_shape::BaseShapePreset;
+use crate::state::{FractalState, Replica};
+
+pub(super) fn build() -> FractalState {
+    let a0 = FRAC_PI_4;
+    let s = SQRT_2 / 2.0;
+    let replicas = vec![
+        Replica {
+            translation: Vec2::new(-0.5, 0.5),
+            rotation: a0,
+            scale: s,
+        },
+        Replica {
+            translation: Vec2::new(0.5, -0.5),
+            rotation: a0,
+            scale: s,
+        },
+    ];
+    state(BaseShapePreset::Segment.lines(), replicas, 12, false)
+}

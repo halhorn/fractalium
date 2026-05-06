@@ -1,0 +1,38 @@
+use bevy::prelude::Vec2;
+
+use crate::fractal_presets::common::state;
+use crate::seed_shape::BaseShapePreset;
+use crate::state::{FractalState, Replica};
+
+pub(super) fn build() -> FractalState {
+    let s = 1.0 / 3.0;
+    let u = 2.0 / 3.0;
+    let replicas = vec![
+        Replica {
+            translation: Vec2::new(-u, -u),
+            rotation: 0.0,
+            scale: s,
+        },
+        Replica {
+            translation: Vec2::new(u, -u),
+            rotation: 0.0,
+            scale: s,
+        },
+        Replica {
+            translation: Vec2::new(-u, u),
+            rotation: 0.0,
+            scale: s,
+        },
+        Replica {
+            translation: Vec2::new(u, u),
+            rotation: 0.0,
+            scale: s,
+        },
+        Replica {
+            translation: Vec2::ZERO,
+            rotation: 0.0,
+            scale: s,
+        },
+    ];
+    state(BaseShapePreset::Square.lines(), replicas, 5, false)
+}
