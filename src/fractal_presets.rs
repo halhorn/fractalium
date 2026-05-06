@@ -37,7 +37,7 @@ impl FractalPreset {
             FractalPreset::SierpinskiTriangle => "Sierpiński triangle",
             FractalPreset::KochCurve => "Koch curve",
             FractalPreset::Vicsek => "Vicsek (fractal cross)",
-            FractalPreset::HeighwayDragon => "Heighway dragon",
+            FractalPreset::HeighwayDragon => "Dragon curve",
             FractalPreset::LevyCCurve => "Lévy C curve",
             FractalPreset::SierpinskiCarpet => "Sierpiński carpet",
             FractalPreset::PythagorasTree => "Pythagoras tree",
