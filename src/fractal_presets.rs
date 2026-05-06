@@ -277,28 +277,26 @@ fn sierpinski_carpet() -> FractalState {
     state(BaseShapePreset::Square.lines(), replicas, 4, false)
 }
 
-/// ピタゴラスの木: 斜辺を種とする直角三角形の 2 相似 IFS（頂点 (0,h)、h>1 で Heighway より立ち上がる）。
-/// 既定は深さ 12・全世代表示で枝の張り方を追いやすくする。
+/// 対称ピタゴラスの木: 正方形の上辺を斜辺とする等辺直角三角形の二脚に、
+/// 辺長 1/√2 の子正方形を外向きに載せる（左 +45°・右 −45°）。`Square` と同じ
+/// 頂点（±1）を持つ基図形で再帰する。
+/// 既定は深さ 12・全世代表示で各オーダーを重ねて見えるようにする。
 fn pythagoras_tree() -> FractalState {
-    let h: f32 = 1.16;
-    let s = (1.0 + h * h).sqrt() * 0.5;
-    let cos_t = 1.0 / (2.0 * s);
-    let sin_t = h / (2.0 * s);
-    let theta = sin_t.atan2(cos_t);
+    let s = SQRT_2 / 2.0;
     let replicas = vec![
         Replica {
-            translation: Vec2::new(-0.5, 0.5 * h),
-            rotation: theta,
+            translation: Vec2::new(-1.0, 2.0),
+            rotation: FRAC_PI_4,
             scale: s,
         },
         Replica {
-            translation: Vec2::new(0.5, 0.5 * h),
-            rotation: -theta,
+            translation: Vec2::new(1.0, 2.0),
+            rotation: -FRAC_PI_4,
             scale: s,
         },
     ];
     state(
-        BaseShapePreset::Segment.lines(),
+        BaseShapePreset::Square.lines(),
         replicas,
         12,
         true,
