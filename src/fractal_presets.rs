@@ -190,7 +190,9 @@ fn vicsek() -> FractalState {
     state(BaseShapePreset::Square.lines(), replicas, 5, false)
 }
 
-/// Heighway dragon（発端を [-1,1] の水平線分とする標準 2 変換 IFS）。
+/// Heighway dragon（発端を [-1,1] の水平線分とする 2 変換 IFS）。
+/// ウィキペディア等の [0,1]×R 側の基底式と、[-1,1] の種を結ぶ Φ(x,y)=(2x-1,2y)
+/// としたうえで Phi o f_i = Replica_i o Phi となる Replica。[f_1 は +45 度、f_2 は +135 度]
 fn heighway_dragon() -> FractalState {
     let a0 = FRAC_PI_4;
     let s = SQRT_2 / 2.0;
@@ -202,7 +204,7 @@ fn heighway_dragon() -> FractalState {
         },
         Replica {
             translation: Vec2::new(0.5, 0.5),
-            rotation: -a0,
+            rotation: 3.0 * a0,
             scale: s,
         },
     ];
