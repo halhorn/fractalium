@@ -25,14 +25,22 @@ const GRID_HIGHLIGHT_COLOR: Color = Color::srgba(0.4, 1.0, 0.6, 0.9);
 pub fn snap_to_grid(pos: Vec2) -> Vec2 {
     let sq = nearest_square_point(pos, GRID_SQUARE_DIV);
     let iso = nearest_iso_point(pos, GRID_TRI_DIV);
-    if iso.distance_squared(pos) <= sq.distance_squared(pos) { iso } else { sq }
+    if iso.distance_squared(pos) <= sq.distance_squared(pos) {
+        iso
+    } else {
+        sq
+    }
 }
 
 /// 直交格子と等角格子のうち、`pos` により近い格子点を返す（高解像度）。
 pub fn snap_to_fine_grid(pos: Vec2) -> Vec2 {
     let sq = nearest_square_point(pos, FINE_SQUARE_DIV);
     let iso = nearest_iso_point(pos, FINE_TRI_DIV);
-    if iso.distance_squared(pos) <= sq.distance_squared(pos) { iso } else { sq }
+    if iso.distance_squared(pos) <= sq.distance_squared(pos) {
+        iso
+    } else {
+        sq
+    }
 }
 
 fn nearest_square_point(pos: Vec2, div: f32) -> Vec2 {
@@ -84,12 +92,20 @@ fn draw_dot<G: GizmoConfigGroup>(gizmos: &mut Gizmos<G>, pt: Vec2, highlighted: 
     }
 }
 
-fn draw_square_grid<G: GizmoConfigGroup>(gizmos: &mut Gizmos<G>, div: f32, highlighted: Option<Vec2>) {
+fn draw_square_grid<G: GizmoConfigGroup>(
+    gizmos: &mut Gizmos<G>,
+    div: f32,
+    highlighted: Option<Vec2>,
+) {
     let s = 2.0 / div;
     let n = (2.0 * GRID_RANGE / s).round() as i32;
     for xi in 0..=n {
         for yi in 0..=n {
-            draw_dot(gizmos, Vec2::new(-GRID_RANGE + xi as f32 * s, -GRID_RANGE + yi as f32 * s), highlighted);
+            draw_dot(
+                gizmos,
+                Vec2::new(-GRID_RANGE + xi as f32 * s, -GRID_RANGE + yi as f32 * s),
+                highlighted,
+            );
         }
     }
 }
@@ -107,12 +123,16 @@ fn draw_iso_grid<G: GizmoConfigGroup>(
     let m_max = (2.0 * GRID_RANGE / v).ceil() as i32;
     for m in 0..=m_max {
         let y = -GRID_RANGE + m as f32 * v;
-        if y > GRID_RANGE + 0.01 { break; }
+        if y > GRID_RANGE + 0.01 {
+            break;
+        }
         let offset = if m.rem_euclid(2) == 0 { 0.0 } else { h / 2.0 };
         let n_max = ((2.0 * GRID_RANGE - offset) / h).ceil() as i32;
         for n in 0..=n_max {
             let x = -GRID_RANGE + n as f32 * h + offset;
-            if x > GRID_RANGE + 0.01 { continue; }
+            if x > GRID_RANGE + 0.01 {
+                continue;
+            }
             let pt = Vec2::new(x, y);
             let on_sq = (pt.x / sq_s).fract().abs() < 1e-4 && (pt.y / sq_s).fract().abs() < 1e-4;
             if !on_sq {

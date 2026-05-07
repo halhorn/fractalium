@@ -89,8 +89,10 @@ impl Replica {
     pub fn apply(&self, p: Vec2) -> Vec2 {
         let scaled = p * self.scale;
         let (sin, cos) = self.rotation.sin_cos();
-        Vec2::new(scaled.x * cos - scaled.y * sin, scaled.x * sin + scaled.y * cos)
-            + self.translation
+        Vec2::new(
+            scaled.x * cos - scaled.y * sin,
+            scaled.x * sin + scaled.y * cos,
+        ) + self.translation
     }
 
     /// `apply` の逆変換（ワールド座標を基図形空間へ）。
@@ -126,10 +128,7 @@ pub struct ScreenRect {
 
 impl ScreenRect {
     pub fn contains(&self, pos: Vec2) -> bool {
-        pos.x >= self.min.x
-            && pos.x <= self.max.x
-            && pos.y >= self.min.y
-            && pos.y <= self.max.y
+        pos.x >= self.min.x && pos.x <= self.max.x && pos.y >= self.min.y && pos.y <= self.max.y
     }
 }
 
@@ -161,7 +160,9 @@ pub struct UiLayout {
 
 impl Default for UiLayout {
     fn default() -> Self {
-        Self { params_collapsed: true }
+        Self {
+            params_collapsed: true,
+        }
     }
 }
 
@@ -247,8 +248,12 @@ impl UndoStack {
         }
     }
 
-    pub fn can_undo(&self) -> bool { !self.history.is_empty() }
-    pub fn can_redo(&self) -> bool { !self.redo_stack.is_empty() }
+    pub fn can_undo(&self) -> bool {
+        !self.history.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
 
     /// URL から状態を読み込んだときなど、履歴を空にする。
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]

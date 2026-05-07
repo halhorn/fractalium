@@ -9,7 +9,7 @@ use bevy::window::PrimaryWindow;
 use crate::fractal::fractal_world_aabb;
 use crate::state::{
     CanvasLayout, DoubleTapZoomActive, FractalState, PendingResultCameraFit, PlacementState,
-    Replica, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica,
 };
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
@@ -67,7 +67,13 @@ struct PanState {
 
 /// ピンチ操作の対象カメラ。
 #[derive(Default, Clone, Copy, PartialEq)]
-enum PinchTarget { #[default] None, Edit, Placement, Result }
+enum PinchTarget {
+    #[default]
+    None,
+    Edit,
+    Placement,
+    Result,
+}
 
 /// 2 本指ピンチズームの追跡状態。
 #[derive(Resource, Default)]
@@ -132,7 +138,9 @@ fn pos_in_viewport(pos: Vec2, window: &Window, cam: &Camera) -> bool {
 
 /// カーソルが指定カメラのビューポート内にあるか返す。
 fn cursor_in_viewport(window: &Window, cam: &Camera) -> bool {
-    window.cursor_position().is_some_and(|pos| pos_in_viewport(pos, window, cam))
+    window
+        .cursor_position()
+        .is_some_and(|pos| pos_in_viewport(pos, window, cam))
 }
 
 fn apply_replica_scale_factor(replica: &mut Replica, factor: f32) {
@@ -145,20 +153,29 @@ fn zoom_placement_canvas(
     windows: Query<&Window, With<PrimaryWindow>>,
     placement: Res<PlacementState>,
     mut state: ResMut<FractalState>,
-    mut cam_q: Query<(&Camera, &GlobalTransform, &mut Projection, &mut Transform), With<PlacementCamera>>,
+    mut cam_q: Query<
+        (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
+        With<PlacementCamera>,
+    >,
 ) {
     let total = scroll.delta.y;
     if total == 0.0 {
         return;
     }
-    let Ok(window) = windows.single() else { return; };
-    let Ok((cam, _, mut proj, mut transform)) = cam_q.single_mut() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, _, mut proj, mut transform)) = cam_q.single_mut() else {
+        return;
+    };
 
     if !cursor_in_viewport(window, cam) {
         return;
     }
 
-    let Projection::Orthographic(ref mut ortho) = *proj else { return; };
+    let Projection::Orthographic(ref mut ortho) = *proj else {
+        return;
+    };
 
     let old_scale = ortho.scale;
     let new_scale = (old_scale * (1.0 - total * ZOOM_SPEED)).clamp(ZOOM_MIN, ZOOM_MAX);
@@ -189,8 +206,12 @@ fn zoom_canvas<C: Component + ZoomTowardsCursor>(
     if total == 0.0 {
         return;
     }
-    let Ok(window) = windows.single() else { return; };
-    let Ok((cam, cam_tf, mut proj, mut transform)) = cam_q.single_mut() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf, mut proj, mut transform)) = cam_q.single_mut() else {
+        return;
+    };
 
     if !cursor_in_viewport(window, cam) {
         return;
@@ -204,7 +225,9 @@ fn zoom_canvas<C: Component + ZoomTowardsCursor>(
         }
     }
 
-    let Projection::Orthographic(ref mut ortho) = *proj else { return; };
+    let Projection::Orthographic(ref mut ortho) = *proj else {
+        return;
+    };
 
     let old_scale = ortho.scale;
     let new_scale = (old_scale * (1.0 - total * ZOOM_SPEED)).clamp(ZOOM_MIN, ZOOM_MAX);
@@ -236,7 +259,9 @@ fn apply_pinch_to_cam(
     midpoint: Vec2,
     scale_factor: f32,
 ) {
-    let Projection::Orthographic(ref mut ortho) = *proj else { return; };
+    let Projection::Orthographic(ref mut ortho) = *proj else {
+        return;
+    };
     let old_scale = ortho.scale;
     let new_scale = (old_scale * scale_factor).clamp(ZOOM_MIN, ZOOM_MAX);
     let scale_ratio = new_scale / old_scale;
@@ -254,7 +279,9 @@ fn apply_pinch_at_world_origin(
     transform: &mut Transform,
     scale_factor: f32,
 ) {
-    let Projection::Orthographic(ref mut ortho) = *proj else { return; };
+    let Projection::Orthographic(ref mut ortho) = *proj else {
+        return;
+    };
     let old_scale = ortho.scale;
     let new_scale = (old_scale * scale_factor).clamp(ZOOM_MIN, ZOOM_MAX);
     let scale_ratio = new_scale / old_scale;
@@ -273,18 +300,32 @@ fn handle_pinch_zoom(
     mut state: ResMut<FractalState>,
     mut edit_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
+        (
+            With<EditCamera>,
+            Without<PlacementCamera>,
+            Without<ResultCamera>,
+        ),
     >,
     mut placement_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        (With<PlacementCamera>, Without<EditCamera>, Without<ResultCamera>),
+        (
+            With<PlacementCamera>,
+            Without<EditCamera>,
+            Without<ResultCamera>,
+        ),
     >,
     mut result_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        (With<ResultCamera>, Without<EditCamera>, Without<PlacementCamera>),
+        (
+            With<ResultCamera>,
+            Without<EditCamera>,
+            Without<PlacementCamera>,
+        ),
     >,
 ) {
-    let Ok(window) = windows.single() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
     let positions: Vec<Vec2> = touches.iter().map(|t| t.position()).collect();
 
     if positions.len() != 2 {
@@ -299,9 +340,18 @@ fn handle_pinch_zoom(
 
     // ピンチ開始時に対象カメラを決定する
     if !pinch.active {
-        let e_in = edit_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c)).unwrap_or(false);
-        let p_in = placement_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c)).unwrap_or(false);
-        let r_in = result_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c)).unwrap_or(false);
+        let e_in = edit_cam_q
+            .single()
+            .map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c))
+            .unwrap_or(false);
+        let p_in = placement_cam_q
+            .single()
+            .map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c))
+            .unwrap_or(false);
+        let r_in = result_cam_q
+            .single()
+            .map(|(c, _, _, _)| pos_in_viewport(midpoint, window, c))
+            .unwrap_or(false);
 
         pinch.target = if e_in {
             PinchTarget::Edit
@@ -335,7 +385,14 @@ fn handle_pinch_zoom(
             }
             PinchTarget::Result => {
                 if let Ok((cam, cam_tf, mut proj, mut transform)) = result_cam_q.single_mut() {
-                    apply_pinch_to_cam(cam, cam_tf, &mut proj, &mut transform, midpoint, scale_factor);
+                    apply_pinch_to_cam(
+                        cam,
+                        cam_tf,
+                        &mut proj,
+                        &mut transform,
+                        midpoint,
+                        scale_factor,
+                    );
                 }
             }
             PinchTarget::None => {}
@@ -358,8 +415,12 @@ fn pan_result(
     layout: Res<CanvasLayout>,
     mut result_cam_q: Query<(&Camera, &GlobalTransform, &mut Transform), With<ResultCamera>>,
 ) {
-    let Ok(window) = windows.single() else { return; };
-    let Ok((cam, cam_tf, mut transform)) = result_cam_q.single_mut() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf, mut transform)) = result_cam_q.single_mut() else {
+        return;
+    };
 
     // === タッチパン（1 本指）===
 
@@ -461,18 +522,32 @@ fn handle_double_tap_zoom(
     mut state: ResMut<FractalState>,
     mut edit_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
+        (
+            With<EditCamera>,
+            Without<PlacementCamera>,
+            Without<ResultCamera>,
+        ),
     >,
     mut placement_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        (With<PlacementCamera>, Without<EditCamera>, Without<ResultCamera>),
+        (
+            With<PlacementCamera>,
+            Without<EditCamera>,
+            Without<ResultCamera>,
+        ),
     >,
     mut result_cam_q: Query<
         (&Camera, &GlobalTransform, &mut Projection, &mut Transform),
-        (With<ResultCamera>, Without<EditCamera>, Without<PlacementCamera>),
+        (
+            With<ResultCamera>,
+            Without<EditCamera>,
+            Without<PlacementCamera>,
+        ),
     >,
 ) {
-    let Ok(window) = windows.single() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
     let now = time.elapsed_secs_f64();
 
     // === アクティブなドラッグズームを処理 ===
@@ -486,7 +561,9 @@ fn handle_double_tap_zoom(
         }
 
         // タッチが離れたら終了
-        if touches.iter_just_released().any(|t| t.id() == id) || touches.iter().find(|t| t.id() == id).is_none() {
+        if touches.iter_just_released().any(|t| t.id() == id)
+            || touches.iter().find(|t| t.id() == id).is_none()
+        {
             dtap_state.active_id = None;
             dtap_state.last_tap_time = 0.0; // 連続ダブルタップを防ぐ
             dtap_active.0 = false;
@@ -512,13 +589,21 @@ fn handle_double_tap_zoom(
                             let replica_factor = 1.0 / zoom_factor;
                             apply_replica_scale_factor(replica, replica_factor);
                         }
-                    } else if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut() {
+                    } else if let Ok((_, _, mut proj, mut transform)) = placement_cam_q.single_mut()
+                    {
                         apply_pinch_at_world_origin(&mut proj, &mut transform, zoom_factor);
                     }
                 }
                 PinchTarget::Result => {
                     if let Ok((cam, cam_tf, mut proj, mut transform)) = result_cam_q.single_mut() {
-                        apply_pinch_to_cam(cam, cam_tf, &mut proj, &mut transform, touch.position(), zoom_factor);
+                        apply_pinch_to_cam(
+                            cam,
+                            cam_tf,
+                            &mut proj,
+                            &mut transform,
+                            touch.position(),
+                            zoom_factor,
+                        );
                     }
                 }
                 PinchTarget::None => {}
@@ -539,9 +624,18 @@ fn handle_double_tap_zoom(
 
         if time_diff < DOUBLE_TAP_TIME && dist < DOUBLE_TAP_DIST {
             // 対象ビューポートを特定（イミュータブル借用を即座にドロップ）
-            let e_in = edit_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(pos, window, c)).unwrap_or(false);
-            let p_in = placement_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(pos, window, c)).unwrap_or(false);
-            let r_in = result_cam_q.single().map(|(c, _, _, _)| pos_in_viewport(pos, window, c)).unwrap_or(false);
+            let e_in = edit_cam_q
+                .single()
+                .map(|(c, _, _, _)| pos_in_viewport(pos, window, c))
+                .unwrap_or(false);
+            let p_in = placement_cam_q
+                .single()
+                .map(|(c, _, _, _)| pos_in_viewport(pos, window, c))
+                .unwrap_or(false);
+            let r_in = result_cam_q
+                .single()
+                .map(|(c, _, _, _)| pos_in_viewport(pos, window, c))
+                .unwrap_or(false);
             let target = if e_in {
                 PinchTarget::Edit
             } else if p_in {

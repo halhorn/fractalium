@@ -13,15 +13,15 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::edit::DrawState;
-use crate::fractal::{
-    clamp_fractal_state_depth, max_depth_for_budget, result_replica_color,
-};
+use crate::fractal::{clamp_fractal_state_depth, max_depth_for_budget, result_replica_color};
 use crate::fractal_presets::FractalPreset;
 use crate::seed_shape::BaseShapePreset;
 use crate::share;
+#[cfg(target_arch = "wasm32")]
+use crate::share::{ShareShortenWasm, ShareWasmBundle};
 use crate::state::{
-    CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, Replica,
-    ScreenRect, UiLayout, UndoStack, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState,
+    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, ScreenRect, UiLayout, UndoStack,
 };
 use crate::toast::EguiToast;
 use crate::view::fit_result_camera_if_requested;
@@ -63,7 +63,9 @@ fn base_shape_header_buttons(
             state.base_shape.lines.remove(idx);
             *draw_state = DrawState::Idle;
         }
-    } else if ui.add_enabled(can_del, egui::Button::new("-").small()).clicked()
+    } else if ui
+        .add_enabled(can_del, egui::Button::new("-").small())
+        .clicked()
         && let DrawState::Selected(idx) = *draw_state
     {
         undo_stack.push(state.clone());
@@ -83,12 +85,57 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EguiToast>()
-            .init_resource::<PendingResultCameraFit>()
-            .add_systems(
-                EguiPrimaryContextPass,
-                (params_panel, fit_result_camera_if_requested).chain(),
-            );
+            .init_resource::<PendingResultCameraFit>();
+
+        #[cfg(target_arch = "wasm32")]
+        app.add_systems(EguiPrimaryContextPass, finalize_share_shorten);
+
+        #[cfg(target_arch = "wasm32")]
+        app.add_systems(
+            EguiPrimaryContextPass,
+            params_panel.after(finalize_share_shorten),
+        );
+
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_systems(EguiPrimaryContextPass, params_panel);
+
+        app.add_systems(
+            EguiPrimaryContextPass,
+            fit_result_camera_if_requested.after(params_panel),
+        );
     }
+}
+
+/// v.gd から戻った短縮結果をクリップボードへ（egui パス内で params より先に実行）。
+#[cfg(target_arch = "wasm32")]
+fn finalize_share_shorten(
+    mut contexts: EguiContexts,
+    mut toast: ResMut<EguiToast>,
+    mut wasm: ResMut<ShareShortenWasm>,
+) -> Result {
+    let ctx = contexts.ctx_mut()?;
+    let done = wasm.pending.lock().ok().and_then(|mut g| g.take());
+    let Some(result) = done else {
+        return Ok(());
+    };
+    wasm.busy = false;
+    match result {
+        Ok(url) => {
+            ctx.copy_text(url.clone());
+            if url.contains("v.gd/") {
+                toast.show(ctx, "Short link copied");
+            } else {
+                toast.show(
+                    ctx,
+                    "Full link copied (shorteners only accept public http(s) URLs)",
+                );
+            }
+        }
+        Err(msg) => {
+            toast.show(ctx, format!("Short link failed: {msg}"));
+        }
+    }
+    Ok(())
 }
 
 fn params_panel(
@@ -102,27 +149,50 @@ fn params_panel(
     mut ui_layout: ResMut<UiLayout>,
     mut toast: ResMut<EguiToast>,
     mut pending_result_fit: ResMut<PendingResultCameraFit>,
+    #[cfg(target_arch = "wasm32")] mut share_wasm: ResMut<ShareShortenWasm>,
     mut edit_cam: Query<
         &mut Camera,
-        (With<EditCamera>, Without<PlacementCamera>, Without<ResultCamera>),
+        (
+            With<EditCamera>,
+            Without<PlacementCamera>,
+            Without<ResultCamera>,
+        ),
     >,
     mut placement_cam: Query<
         &mut Camera,
-        (With<PlacementCamera>, Without<EditCamera>, Without<ResultCamera>),
+        (
+            With<PlacementCamera>,
+            Without<EditCamera>,
+            Without<ResultCamera>,
+        ),
     >,
     mut result_cam: Query<
         &mut Camera,
-        (With<ResultCamera>, Without<EditCamera>, Without<PlacementCamera>),
+        (
+            With<ResultCamera>,
+            Without<EditCamera>,
+            Without<PlacementCamera>,
+        ),
     >,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Ok(window) = windows.single() else { return Ok(()); };
+    let Ok(window) = windows.single() else {
+        return Ok(());
+    };
     let scale = window.scale_factor();
     let win_w = window.width();
     let win_h = window.height();
     let win_phys = UVec2::new(window.physical_width(), window.physical_height());
 
     let is_narrow = win_w < 700.0;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut share_bundle = None::<crate::share::ShareWasmBundle<'static>>;
+    #[cfg(target_arch = "wasm32")]
+    let mut share_bundle = Some(ShareWasmBundle {
+        wasm: &mut *share_wasm,
+    });
+    let share_web = &mut share_bundle;
 
     let (edit_egui_rect, placement_egui_rect, result_egui_rect) = if is_narrow {
         layout_narrow(
@@ -136,6 +206,7 @@ fn params_panel(
             &mut ui_layout,
             &mut toast,
             &mut pending_result_fit,
+            share_web,
         )
     } else {
         layout_wide(
@@ -149,6 +220,7 @@ fn params_panel(
             &mut ui_layout,
             &mut toast,
             &mut pending_result_fit,
+            share_web,
         )
     };
 
@@ -185,9 +257,16 @@ fn layout_wide(
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
     pending_result_fit: &mut PendingResultCameraFit,
+    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))] share_web: &mut Option<
+        crate::share::ShareWasmBundle<'_>,
+    >,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
-    let params_w = if ui_layout.params_collapsed { 28.0_f32 } else { 240.0_f32 };
+    let params_w = if ui_layout.params_collapsed {
+        28.0_f32
+    } else {
+        240.0_f32
+    };
     let right_resp = egui::SidePanel::right("params")
         .exact_width(params_w)
         .show(ctx, |ui| {
@@ -218,6 +297,7 @@ fn layout_wide(
                         undo_stack,
                         toast,
                         pending_result_fit,
+                        share_web,
                     );
                 });
             ui.separator();
@@ -268,6 +348,9 @@ fn layout_narrow(
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
     pending_result_fit: &mut PendingResultCameraFit,
+    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))] share_web: &mut Option<
+        crate::share::ShareWasmBundle<'_>,
+    >,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
@@ -361,6 +444,7 @@ fn layout_narrow(
                 undo_stack,
                 toast,
                 pending_result_fit,
+                share_web,
             );
         });
 
@@ -471,17 +555,26 @@ fn global_controls_bar(
     undo_stack: &mut UndoStack,
     toast: &mut EguiToast,
     pending_result_fit: &mut PendingResultCameraFit,
+    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))] share_web: &mut Option<
+        crate::share::ShareWasmBundle<'_>,
+    >,
 ) {
     ui.add_space(4.0);
     let row_h = ui.spacing().interact_size.y;
     ui.horizontal(|ui| {
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(undo_stack.can_undo(), egui::Button::new("↩")).clicked() {
+            if ui
+                .add_enabled(undo_stack.can_undo(), egui::Button::new("↩"))
+                .clicked()
+            {
                 if let Some(prev) = undo_stack.undo_pop(state.clone()) {
                     *state = prev;
                 }
             }
-            if ui.add_enabled(undo_stack.can_redo(), egui::Button::new("↪")).clicked() {
+            if ui
+                .add_enabled(undo_stack.can_redo(), egui::Button::new("↪"))
+                .clicked()
+            {
                 if let Some(next) = undo_stack.redo_pop(state.clone()) {
                     *state = next;
                 }
@@ -522,14 +615,33 @@ fn global_controls_bar(
             |ui| {
                 if ui
                     .add(egui::Button::new("Share"))
-                    .on_hover_text("copy link")
+                    .on_hover_text("copy short sharing link")
                     .clicked()
                 {
                     match share::encode_state(state) {
                         Ok(token) => match share::share_url_from_token(&token) {
                             Ok(url) => {
-                                ui.ctx().copy_text(url);
-                                toast.show(ui.ctx(), "Link Copied");
+                                #[cfg(target_arch = "wasm32")]
+                                {
+                                    if let Some(b) = share_web.as_mut() {
+                                        if share::request_share_short_link_start(
+                                            b.wasm,
+                                            url.clone(),
+                                        ) {
+                                            toast.show(ui.ctx(), "Generating short link…");
+                                        } else {
+                                            toast.show(ui.ctx(), "Still generating…");
+                                        }
+                                    } else {
+                                        ui.ctx().copy_text(url);
+                                        toast.show(ui.ctx(), "Link copied");
+                                    }
+                                }
+                                #[cfg(not(target_arch = "wasm32"))]
+                                {
+                                    ui.ctx().copy_text(url);
+                                    toast.show(ui.ctx(), "Link copied");
+                                }
                             }
                             Err(e) => bevy::log::warn!("share URL: {e}"),
                         },
@@ -616,11 +728,7 @@ fn egui_rect_to_viewport(rect: egui::Rect, scale: f32, win_phys: UVec2) -> Optio
 
 // === パラメータパネル内 UI ===
 
-fn draw_params_controls(
-    ui: &mut egui::Ui,
-    state: &mut FractalState,
-    undo_stack: &mut UndoStack,
-) {
+fn draw_params_controls(ui: &mut egui::Ui, state: &mut FractalState, undo_stack: &mut UndoStack) {
     ui.label(format!("Lines: {}", state.base_shape.lines.len()));
     ui.add_space(6.0);
 
@@ -674,9 +782,17 @@ fn replica_title_color(i: usize, total: usize) -> egui::Color32 {
 fn translation_row(ui: &mut egui::Ui, translation: &mut Vec2) {
     ui.horizontal(|ui| {
         ui.label("TX");
-        ui.add(egui::DragValue::new(&mut translation.x).speed(0.01).range(-2.0..=2.0));
+        ui.add(
+            egui::DragValue::new(&mut translation.x)
+                .speed(0.01)
+                .range(-2.0..=2.0),
+        );
         ui.label("TY");
-        ui.add(egui::DragValue::new(&mut translation.y).speed(0.01).range(-2.0..=2.0));
+        ui.add(
+            egui::DragValue::new(&mut translation.y)
+                .speed(0.01)
+                .range(-2.0..=2.0),
+        );
     });
 }
 
@@ -685,7 +801,11 @@ fn rotation_row(ui: &mut egui::Ui, rotation: &mut f32) {
         ui.label("Rot (deg)");
         let mut deg = rotation.to_degrees();
         if ui
-            .add(egui::DragValue::new(&mut deg).speed(0.5).range(-180.0..=180.0))
+            .add(
+                egui::DragValue::new(&mut deg)
+                    .speed(0.5)
+                    .range(-180.0..=180.0),
+            )
             .changed()
         {
             *rotation = deg.to_radians();

@@ -15,14 +15,14 @@ use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::PlacementCamera;
 use crate::fractal::result_replica_color;
 use crate::grid::{draw_fine_grid, snap_to_fine_grid};
 use crate::placement_layer;
 use crate::state::{
-    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState, Replica,
-    UndoStack, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState,
+    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, UndoStack,
 };
-use crate::PlacementCamera;
 
 // === 定数 ===
 
@@ -100,7 +100,10 @@ impl Aabb {
     }
 
     fn expanded(self, margin: f32) -> Self {
-        Self { min: self.min - Vec2::splat(margin), max: self.max + Vec2::splat(margin) }
+        Self {
+            min: self.min - Vec2::splat(margin),
+            max: self.max + Vec2::splat(margin),
+        }
     }
 }
 
@@ -108,7 +111,10 @@ impl Aabb {
 fn base_shape_aabb(lines: &[Line]) -> Aabb {
     if lines.is_empty() {
         let h = DEFAULT_AABB_HALF;
-        return Aabb { min: Vec2::splat(-h), max: Vec2::splat(h) };
+        return Aabb {
+            min: Vec2::splat(-h),
+            max: Vec2::splat(h),
+        };
     }
     let mut min = Vec2::splat(f32::MAX);
     let mut max = Vec2::splat(f32::MIN);
@@ -120,7 +126,10 @@ fn base_shape_aabb(lines: &[Line]) -> Aabb {
     }
     let center = (min + max) * 0.5;
     let half = ((max - min) * 0.5).max(Vec2::splat(DEFAULT_AABB_HALF));
-    Aabb { min: center - half, max: center + half }
+    Aabb {
+        min: center - half,
+        max: center + half,
+    }
 }
 
 /// 基図形空間での表示用 AABB（マージン付き）。レプリカと同じ向きの外枠のローカル定義。
@@ -134,7 +143,12 @@ fn display_frame_center_world(replica: &Replica, lines: &[Line]) -> Vec2 {
 }
 
 /// ワールド点が表示外枠（レプリカ座標系に固まった矩形）内か。`margin` は基図形空間で広げる。
-fn display_frame_contains_world(replica: &Replica, lines: &[Line], world: Vec2, margin: f32) -> bool {
+fn display_frame_contains_world(
+    replica: &Replica,
+    lines: &[Line],
+    world: Vec2,
+    margin: f32,
+) -> bool {
     let local = replica.inverse_apply(world);
     base_display_aabb(lines).expanded(margin).contains(local)
 }
@@ -161,13 +175,20 @@ fn oriented_display_corners(replica: &Replica, lines: &[Line]) -> [Vec2; 4] {
 
 // === カーソル変換 ===
 
-fn world_pos_in_placement(screen: Vec2, window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
+fn world_pos_in_placement(
+    screen: Vec2,
+    window: &Window,
+    cam: &Camera,
+    cam_tf: &GlobalTransform,
+) -> Option<Vec2> {
     if let Some(ref vp) = cam.viewport {
         let scale = window.scale_factor();
         let vp_min = vp.physical_position.as_vec2() / scale;
         let vp_size = vp.physical_size.as_vec2() / scale;
-        if screen.x < vp_min.x || screen.y < vp_min.y
-            || screen.x > vp_min.x + vp_size.x || screen.y > vp_min.y + vp_size.y
+        if screen.x < vp_min.x
+            || screen.y < vp_min.y
+            || screen.x > vp_min.x + vp_size.x
+            || screen.y > vp_min.y + vp_size.y
         {
             return None;
         }
@@ -186,8 +207,12 @@ fn world_to_egui_pos(
     cam_tf: &GlobalTransform,
     scale: f32,
 ) -> Option<egui::Pos2> {
-    let vp_log = cam.world_to_viewport(cam_tf, Vec3::new(world.x, world.y, 0.0)).ok()?;
-    let vp_origin_log = cam.viewport.as_ref()
+    let vp_log = cam
+        .world_to_viewport(cam_tf, Vec3::new(world.x, world.y, 0.0))
+        .ok()?;
+    let vp_origin_log = cam
+        .viewport
+        .as_ref()
         .map(|v| v.physical_position.as_vec2() / scale)
         .unwrap_or(Vec2::ZERO);
     let screen_log = vp_log + vp_origin_log;
@@ -210,9 +235,15 @@ fn handle_placement_input(
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
     mut contexts: EguiContexts,
 ) {
-    let Ok(window) = windows.single() else { return; };
-    let Ok((cam, cam_tf)) = placement_cam.single() else { return; };
-    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || state.snap_grid;
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf)) = placement_cam.single() else {
+        return;
+    };
+    let ctrl = keys.pressed(KeyCode::ControlLeft)
+        || keys.pressed(KeyCode::ControlRight)
+        || state.snap_grid;
 
     // === タッチ入力管理 ===
     let touch_count = touches.iter().count();
@@ -238,24 +269,43 @@ fn handle_placement_input(
         }
     }
 
-    let (touch_just_pressed, touch_pressed, touch_just_released, touch_screen_pos): (bool, bool, bool, Option<Vec2>) =
-        if let Some(drag_id) = *drag_touch_id {
-            let active = touches.iter().find(|t| t.id() == drag_id);
-            let released = touches.iter_just_released().find(|t| t.id() == drag_id);
-            let just_pressed = touches.just_pressed(drag_id);
-            let just_released = released.is_some();
-            let screen_pos = active.map(|t| t.position())
-                .or_else(|| released.map(|t| t.position()));
-            if just_released { *drag_touch_id = None; }
-            (just_pressed, active.is_some(), just_released, screen_pos)
-        } else {
-            (false, false, false, None)
-        };
+    let (touch_just_pressed, touch_pressed, touch_just_released, touch_screen_pos): (
+        bool,
+        bool,
+        bool,
+        Option<Vec2>,
+    ) = if let Some(drag_id) = *drag_touch_id {
+        let active = touches.iter().find(|t| t.id() == drag_id);
+        let released = touches.iter_just_released().find(|t| t.id() == drag_id);
+        let just_pressed = touches.just_pressed(drag_id);
+        let just_released = released.is_some();
+        let screen_pos = active
+            .map(|t| t.position())
+            .or_else(|| released.map(|t| t.position()));
+        if just_released {
+            *drag_touch_id = None;
+        }
+        (just_pressed, active.is_some(), just_released, screen_pos)
+    } else {
+        (false, false, false, None)
+    };
 
     let use_touch = touch_pressed || touch_just_pressed || touch_just_released;
-    let pressing = if use_touch { touch_pressed } else { buttons.pressed(MouseButton::Left) };
-    let just_pressing = if use_touch { touch_just_pressed } else { buttons.just_pressed(MouseButton::Left) };
-    let just_releasing = if use_touch { touch_just_released } else { buttons.just_released(MouseButton::Left) };
+    let pressing = if use_touch {
+        touch_pressed
+    } else {
+        buttons.pressed(MouseButton::Left)
+    };
+    let just_pressing = if use_touch {
+        touch_just_pressed
+    } else {
+        buttons.just_pressed(MouseButton::Left)
+    };
+    let just_releasing = if use_touch {
+        touch_just_released
+    } else {
+        buttons.just_released(MouseButton::Left)
+    };
 
     let cursor: Option<Vec2> = touch_screen_pos
         .or_else(|| window.cursor_position())
@@ -282,8 +332,13 @@ fn handle_placement_input(
     }
 
     let egui_ctx = contexts.ctx_mut();
-    let egui_wants_pointer = egui_ctx.as_ref().map(|ctx| ctx.is_using_pointer()).unwrap_or(false);
-    let egui_wants_keyboard = egui_ctx.map(|ctx| ctx.wants_keyboard_input()).unwrap_or(false);
+    let egui_wants_pointer = egui_ctx
+        .as_ref()
+        .map(|ctx| ctx.is_using_pointer())
+        .unwrap_or(false);
+    let egui_wants_keyboard = egui_ctx
+        .map(|ctx| ctx.wants_keyboard_input())
+        .unwrap_or(false);
 
     // Ctrl+C / Ctrl+V（egui がキーボードを必要としていないときのみ）
     if ctrl && !egui_wants_keyboard {
@@ -306,11 +361,21 @@ fn handle_placement_input(
 
     // ドラッグ継続・終了は egui_wants_pointer に関わらず処理する。
     if pressing {
-        if let PlacementDrag::RotatePending { pivot, start_cursor, start_angle, start_rotation } = placement.drag {
+        if let PlacementDrag::RotatePending {
+            pivot,
+            start_cursor,
+            start_angle,
+            start_rotation,
+        } = placement.drag
+        {
             if let Some(pos) = cursor {
                 if (pos - start_cursor).length_squared() > ROTATE_START_THRESHOLD_SQ {
                     undo_stack.push(state.clone());
-                    placement.drag = PlacementDrag::Rotate { pivot, start_angle, start_rotation };
+                    placement.drag = PlacementDrag::Rotate {
+                        pivot,
+                        start_angle,
+                        start_rotation,
+                    };
                 }
             }
         }
@@ -340,9 +405,15 @@ fn handle_placement_input(
     if buttons.just_pressed(MouseButton::Right) {
         if let Some(pos) = cursor {
             // クリック位置のレプリカを探す
-            let hit = state.replicas.iter().enumerate().rev().find(|(_, r)| {
-                display_frame_contains_world(r, &state.base_shape.lines, pos, CLICK_MARGIN)
-            }).map(|(i, _)| i);
+            let hit = state
+                .replicas
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(_, r)| {
+                    display_frame_contains_world(r, &state.base_shape.lines, pos, CLICK_MARGIN)
+                })
+                .map(|(i, _)| i);
 
             if let Some(i) = hit {
                 undo_stack.push(state.clone());
@@ -356,7 +427,6 @@ fn handle_placement_input(
             }
         }
     }
-
 }
 
 /// マウス押下時のドラッグ開始判定。
@@ -370,15 +440,25 @@ fn start_drag(
     // 選択中レプリカを最優先でヒットテスト（枠線ドラッグを他のオブジェクトに奪われないため）
     let selected_hit = placement.selected.and_then(|sel| {
         let r = state.replicas.get(sel)?;
-        display_frame_contains_world(r, &state.base_shape.lines, cursor_pos, CLICK_MARGIN).then_some(sel)
+        display_frame_contains_world(r, &state.base_shape.lines, cursor_pos, CLICK_MARGIN)
+            .then_some(sel)
     });
 
     // 選択中がヒットしない場合のみ他のレプリカを検索（描画順の逆＝手前優先）
     let clicked = selected_hit.or_else(|| {
-        state.replicas.iter().enumerate().rev()
+        state
+            .replicas
+            .iter()
+            .enumerate()
+            .rev()
             .find(|(i, r)| {
                 Some(*i) != placement.selected
-                    && display_frame_contains_world(r, &state.base_shape.lines, cursor_pos, CLICK_MARGIN)
+                    && display_frame_contains_world(
+                        r,
+                        &state.base_shape.lines,
+                        cursor_pos,
+                        CLICK_MARGIN,
+                    )
             })
             .map(|(i, _)| i)
     });
@@ -420,25 +500,46 @@ fn start_drag(
 }
 
 /// ドラッグ中にレプリカのパラメータを更新する。
-fn apply_drag(cursor_pos: Vec2, ctrl: bool, state: &mut FractalState, placement: &mut PlacementState) {
-    let Some(sel) = placement.selected else { return; };
-    let Some(replica) = state.replicas.get_mut(sel) else { return; };
+fn apply_drag(
+    cursor_pos: Vec2,
+    ctrl: bool,
+    state: &mut FractalState,
+    placement: &mut PlacementState,
+) {
+    let Some(sel) = placement.selected else {
+        return;
+    };
+    let Some(replica) = state.replicas.get_mut(sel) else {
+        return;
+    };
     match placement.drag {
         PlacementDrag::Idle => {}
-        PlacementDrag::Move { start_cursor, start_translation } => {
+        PlacementDrag::Move {
+            start_cursor,
+            start_translation,
+        } => {
             let raw = start_translation + (cursor_pos - start_cursor);
             replica.translation = if ctrl { snap_to_fine_grid(raw) } else { raw };
         }
-        PlacementDrag::Scale { pivot, start_cursor_dist, start_scale } => {
+        PlacementDrag::Scale {
+            pivot,
+            start_cursor_dist,
+            start_scale,
+        } => {
             let current_dist = (cursor_pos - pivot).length();
             let raw_scale = start_scale * (current_dist / start_cursor_dist);
             replica.scale = if ctrl {
                 (raw_scale / 0.05).round() * 0.05
             } else {
                 raw_scale
-            }.clamp(REPLICA_SCALE_MIN, REPLICA_SCALE_MAX);
+            }
+            .clamp(REPLICA_SCALE_MIN, REPLICA_SCALE_MAX);
         }
-        PlacementDrag::Rotate { pivot, start_angle, start_rotation } => {
+        PlacementDrag::Rotate {
+            pivot,
+            start_angle,
+            start_rotation,
+        } => {
             let d = cursor_pos - pivot;
             let current_angle = d.y.atan2(d.x);
             let raw = start_rotation + angle_diff(current_angle, start_angle);
@@ -468,18 +569,26 @@ fn update_placement_cursor(
     windows: Query<(Entity, &Window), With<PrimaryWindow>>,
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
 ) {
-    let Ok((window_entity, window)) = windows.single() else { return; };
-    let Ok((cam, cam_tf)) = placement_cam.single() else { return; };
+    let Ok((window_entity, window)) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf)) = placement_cam.single() else {
+        return;
+    };
     let cursor = cursor_in_placement(window, cam, cam_tf);
 
-    let on_corner = placement.selected
+    let on_corner = placement
+        .selected
         .and_then(|sel| state.replicas.get(sel))
         .is_some_and(|r| {
-            cursor.is_some_and(|pos| display_frame_near_corner_world(r, &state.base_shape.lines, pos))
+            cursor
+                .is_some_and(|pos| display_frame_near_corner_world(r, &state.base_shape.lines, pos))
         });
 
     if on_corner {
-        commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::NwseResize));
+        commands
+            .entity(window_entity)
+            .insert(CursorIcon::from(SystemCursorIcon::NwseResize));
     } else {
         commands.entity(window_entity).remove::<CursorIcon>();
     }
@@ -495,10 +604,18 @@ fn draw_placement_ctrl_grid(
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
     mut gizmos: Gizmos<PlacementGizmos>,
 ) {
-    let ctrl = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || state.snap_grid;
-    if !ctrl { return; }
-    let Ok(window) = windows.single() else { return; };
-    let Ok((cam, cam_tf)) = placement_cam.single() else { return; };
+    let ctrl = keys.pressed(KeyCode::ControlLeft)
+        || keys.pressed(KeyCode::ControlRight)
+        || state.snap_grid;
+    if !ctrl {
+        return;
+    }
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf)) = placement_cam.single() else {
+        return;
+    };
     let cursor = cursor_in_placement(window, cam, cam_tf);
     draw_fine_grid(&mut gizmos, cursor.map(snap_to_fine_grid));
 }
@@ -528,8 +645,12 @@ fn draw_selection_box(
     placement: Res<PlacementState>,
     mut gizmos: Gizmos<PlacementGizmos>,
 ) {
-    let Some(sel) = placement.selected else { return; };
-    let Some(replica) = state.replicas.get(sel) else { return; };
+    let Some(sel) = placement.selected else {
+        return;
+    };
+    let Some(replica) = state.replicas.get(sel) else {
+        return;
+    };
     let corners = oriented_display_corners(replica, &state.base_shape.lines);
     for k in 0..4 {
         gizmos.line_2d(corners[k], corners[(k + 1) % 4], SELECTION_COLOR);
@@ -538,13 +659,26 @@ fn draw_selection_box(
     // コーナーハンドル
     for corner in corners {
         let h = HANDLE_HALF;
-        draw_rect(&mut gizmos, corner - Vec2::splat(h), corner + Vec2::splat(h), SELECTION_COLOR);
+        draw_rect(
+            &mut gizmos,
+            corner - Vec2::splat(h),
+            corner + Vec2::splat(h),
+            SELECTION_COLOR,
+        );
     }
 
     // + マーク: レプリカの座標原点（translation）に表示
     let pivot = replica.translation;
-    gizmos.line_2d(pivot - Vec2::X * PIVOT_ARM, pivot + Vec2::X * PIVOT_ARM, PIVOT_COLOR);
-    gizmos.line_2d(pivot - Vec2::Y * PIVOT_ARM, pivot + Vec2::Y * PIVOT_ARM, PIVOT_COLOR);
+    gizmos.line_2d(
+        pivot - Vec2::X * PIVOT_ARM,
+        pivot + Vec2::X * PIVOT_ARM,
+        PIVOT_COLOR,
+    );
+    gizmos.line_2d(
+        pivot - Vec2::Y * PIVOT_ARM,
+        pivot + Vec2::Y * PIVOT_ARM,
+        PIVOT_COLOR,
+    );
 }
 
 fn draw_rect(gizmos: &mut Gizmos<PlacementGizmos>, min: Vec2, max: Vec2, color: Color) {
@@ -568,22 +702,31 @@ fn placement_overlay_ui(
     layout: Res<CanvasLayout>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Some(sel) = placement.selected else { return Ok(()); };
-    let Some(replica) = state.replicas.get(sel) else { return Ok(()); };
-    let Ok(window) = windows.single() else { return Ok(()); };
-    let Ok((cam, cam_tf)) = placement_cam.single() else { return Ok(()); };
+    let Some(sel) = placement.selected else {
+        return Ok(());
+    };
+    let Some(replica) = state.replicas.get(sel) else {
+        return Ok(());
+    };
+    let Ok(window) = windows.single() else {
+        return Ok(());
+    };
+    let Ok((cam, cam_tf)) = placement_cam.single() else {
+        return Ok(());
+    };
 
     let scale = window.scale_factor();
     // 基図形ローカル (max x, max y) をワールドへ（レプリカと同じ向きの外枠の「右上」）
     let corners = oriented_display_corners(replica, &state.base_shape.lines);
-    let Some(btn_pos) = world_to_egui_pos(corners[2], cam, cam_tf, scale)
-    else {
+    let Some(btn_pos) = world_to_egui_pos(corners[2], cam, cam_tf, scale) else {
         return Ok(());
     };
 
     // Placement パネル内に収まっているときのみ表示
-    if btn_pos.x < layout.placement_min_x || btn_pos.x > layout.placement_max_x
-        || btn_pos.y < layout.placement_min_y || btn_pos.y > layout.placement_max_y
+    if btn_pos.x < layout.placement_min_x
+        || btn_pos.x > layout.placement_max_x
+        || btn_pos.y < layout.placement_min_y
+        || btn_pos.y > layout.placement_max_y
     {
         return Ok(());
     }

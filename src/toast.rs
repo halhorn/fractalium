@@ -107,7 +107,9 @@ impl EguiToast {
                             egui::RichText::new(text)
                                 .strong()
                                 .font(egui::FontId::proportional(Self::TEXT_SIZE))
-                                .color(egui::Color32::from_rgba_unmultiplied(255, 255, 255, text_a)),
+                                .color(egui::Color32::from_rgba_unmultiplied(
+                                    255, 255, 255, text_a,
+                                )),
                         );
                     });
             });

@@ -118,7 +118,12 @@ fn snap_to_45(start: Vec2, end: Vec2) -> Vec2 {
 }
 
 /// スクリーン座標を Edit カメラのビューポートでクランプしてワールド座標へ変換する。
-fn world_pos_in_edit(screen: Vec2, window: &Window, cam: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
+fn world_pos_in_edit(
+    screen: Vec2,
+    window: &Window,
+    cam: &Camera,
+    cam_tf: &GlobalTransform,
+) -> Option<Vec2> {
     if let Some(ref vp) = cam.viewport {
         let scale = window.scale_factor();
         let vp_min = vp.physical_position.as_vec2() / scale;
@@ -191,8 +196,12 @@ fn handle_drag_input(
     edit_cam: Query<(&Camera, &GlobalTransform), With<EditCamera>>,
     mut contexts: EguiContexts,
 ) {
-    let Ok(window) = windows.single() else { return; };
-    let Ok((cam, cam_tf)) = edit_cam.single() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Ok((cam, cam_tf)) = edit_cam.single() else {
+        return;
+    };
     let modifiers = Modifiers::read(&keys, &state);
 
     // === タッチ入力管理 ===
@@ -226,27 +235,44 @@ fn handle_drag_input(
     }
 
     // タッチに基づく仮想マウス状態を計算
-    let (touch_just_pressed, touch_pressed, touch_just_released, touch_screen_pos): (bool, bool, bool, Option<Vec2>) =
-        if let Some(draw_id) = *draw_touch_id {
-            let active = touches.iter().find(|t| t.id() == draw_id);
-            let released = touches.iter_just_released().find(|t| t.id() == draw_id);
-            let just_pressed = touches.just_pressed(draw_id);
-            let just_released = released.is_some();
-            let screen_pos = active.map(|t| t.position())
-                .or_else(|| released.map(|t| t.position()));
-            if just_released {
-                *draw_touch_id = None;
-            }
-            (just_pressed, active.is_some(), just_released, screen_pos)
-        } else {
-            (false, false, false, None)
-        };
+    let (touch_just_pressed, touch_pressed, touch_just_released, touch_screen_pos): (
+        bool,
+        bool,
+        bool,
+        Option<Vec2>,
+    ) = if let Some(draw_id) = *draw_touch_id {
+        let active = touches.iter().find(|t| t.id() == draw_id);
+        let released = touches.iter_just_released().find(|t| t.id() == draw_id);
+        let just_pressed = touches.just_pressed(draw_id);
+        let just_released = released.is_some();
+        let screen_pos = active
+            .map(|t| t.position())
+            .or_else(|| released.map(|t| t.position()));
+        if just_released {
+            *draw_touch_id = None;
+        }
+        (just_pressed, active.is_some(), just_released, screen_pos)
+    } else {
+        (false, false, false, None)
+    };
 
     // タッチが有効なときはマウスを無視
     let use_touch = touch_pressed || touch_just_pressed || touch_just_released;
-    let pressing = if use_touch { touch_pressed } else { buttons.pressed(MouseButton::Left) };
-    let just_pressing = if use_touch { touch_just_pressed } else { buttons.just_pressed(MouseButton::Left) };
-    let just_releasing = if use_touch { touch_just_released } else { buttons.just_released(MouseButton::Left) };
+    let pressing = if use_touch {
+        touch_pressed
+    } else {
+        buttons.pressed(MouseButton::Left)
+    };
+    let just_pressing = if use_touch {
+        touch_just_pressed
+    } else {
+        buttons.just_pressed(MouseButton::Left)
+    };
+    let just_releasing = if use_touch {
+        touch_just_released
+    } else {
+        buttons.just_released(MouseButton::Left)
+    };
 
     // カーソル位置: タッチ優先、なければマウス
     let cursor: Option<Vec2> = touch_screen_pos
@@ -254,8 +280,13 @@ fn handle_drag_input(
         .and_then(|pos| world_pos_in_edit(pos, window, cam, cam_tf));
 
     let egui_ctx = contexts.ctx_mut();
-    let egui_wants_pointer = egui_ctx.as_ref().map(|ctx| ctx.is_using_pointer()).unwrap_or(false);
-    let egui_wants_keyboard = egui_ctx.map(|ctx| ctx.wants_keyboard_input()).unwrap_or(false);
+    let egui_wants_pointer = egui_ctx
+        .as_ref()
+        .map(|ctx| ctx.is_using_pointer())
+        .unwrap_or(false);
+    let egui_wants_keyboard = egui_ctx
+        .map(|ctx| ctx.wants_keyboard_input())
+        .unwrap_or(false);
 
     // 選択インデックスが範囲外になっていたらリセット
     let n = state.base_shape.lines.len();
@@ -288,12 +319,20 @@ fn handle_drag_input(
     // pressed: ドラッグ中の位置更新
     if pressing {
         match *draw_state {
-            DrawState::DrawingLine { ref mut last_cursor, .. } => {
+            DrawState::DrawingLine {
+                ref mut last_cursor,
+                ..
+            } => {
                 if let Some(pos) = cursor {
                     *last_cursor = pos;
                 }
             }
-            DrawState::MovingLine { idx, cursor_start, line_a_start, line_b_start } => {
+            DrawState::MovingLine {
+                idx,
+                cursor_start,
+                line_a_start,
+                line_b_start,
+            } => {
                 if let Some(pos) = cursor {
                     let delta = pos - cursor_start;
                     if let Some(line) = state.base_shape.lines.get_mut(idx) {
@@ -302,7 +341,12 @@ fn handle_drag_input(
                     }
                 }
             }
-            DrawState::MovingEndpoint { idx, end, fixed, ref mut last_cursor } => {
+            DrawState::MovingEndpoint {
+                idx,
+                end,
+                fixed,
+                ref mut last_cursor,
+            } => {
                 if let Some(pos) = cursor {
                     *last_cursor = pos;
                     let (snapped, _) = snap_endpoint(fixed, pos, &modifiers);
@@ -359,7 +403,12 @@ fn handle_drag_input(
 
             if let Some((idx, end, fixed)) = endpoint_hit {
                 undo_stack.push(state.clone());
-                *draw_state = DrawState::MovingEndpoint { idx, end, fixed, last_cursor: cursor_pos };
+                *draw_state = DrawState::MovingEndpoint {
+                    idx,
+                    end,
+                    fixed,
+                    last_cursor: cursor_pos,
+                };
             } else if let Some(hit_idx) = find_line_at(cursor_pos, &state.base_shape.lines) {
                 let line = state.base_shape.lines[hit_idx];
                 undo_stack.push(state.clone());
@@ -370,8 +419,15 @@ fn handle_drag_input(
                     line_b_start: line.b,
                 };
             } else {
-                let start = if modifiers.ctrl { snap_to_grid(cursor_pos) } else { cursor_pos };
-                *draw_state = DrawState::DrawingLine { start, last_cursor: start };
+                let start = if modifiers.ctrl {
+                    snap_to_grid(cursor_pos)
+                } else {
+                    cursor_pos
+                };
+                *draw_state = DrawState::DrawingLine {
+                    start,
+                    last_cursor: start,
+                };
             }
         }
     }
@@ -419,7 +475,11 @@ fn draw_canvas(
     }
 }
 
-fn draw_confirmed_lines(state: &FractalState, draw_state: &DrawState, gizmos: &mut Gizmos<EditGizmos>) {
+fn draw_confirmed_lines(
+    state: &FractalState,
+    draw_state: &DrawState,
+    gizmos: &mut Gizmos<EditGizmos>,
+) {
     let selected_idx = match *draw_state {
         DrawState::Selected(i)
         | DrawState::MovingLine { idx: i, .. }
@@ -427,7 +487,11 @@ fn draw_confirmed_lines(state: &FractalState, draw_state: &DrawState, gizmos: &m
         _ => None,
     };
     for (i, line) in state.base_shape.lines.iter().enumerate() {
-        let color = if Some(i) == selected_idx { SELECTED_COLOR } else { CONFIRMED_COLOR };
+        let color = if Some(i) == selected_idx {
+            SELECTED_COLOR
+        } else {
+            CONFIRMED_COLOR
+        };
         gizmos.line_2d(line.a, line.b, color);
     }
 }

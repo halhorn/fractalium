@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
 use edit::EditPlugin;
-use fractal::{clamp_fractal_state_depth, FractalPlugin};
+use fractal::{FractalPlugin, clamp_fractal_state_depth};
 use fractal_presets::FractalPreset;
 use placement::PlacementPlugin;
 use share::SharePlugin;
@@ -98,8 +98,8 @@ fn main() {
             FractalPlugin,
             PlacementPlugin,
             ViewPlugin,
-            UiPlugin,
             SharePlugin,
+            UiPlugin,
         ))
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
         .insert_resource(initial_fractal_state())
@@ -192,10 +192,10 @@ fn spawn_unit_frame(commands: &mut Commands, layer: &RenderLayers) {
     let color = Color::srgb(0.18, 0.18, 0.22);
     let thickness = 0.01;
     let sides = [
-        (Vec2::new(2.0, thickness), Vec3::new(0.0, 1.0, 0.0)),  // 上辺
+        (Vec2::new(2.0, thickness), Vec3::new(0.0, 1.0, 0.0)), // 上辺
         (Vec2::new(2.0, thickness), Vec3::new(0.0, -1.0, 0.0)), // 下辺
         (Vec2::new(thickness, 2.0), Vec3::new(-1.0, 0.0, 0.0)), // 左辺
-        (Vec2::new(thickness, 2.0), Vec3::new(1.0, 0.0, 0.0)),  // 右辺
+        (Vec2::new(thickness, 2.0), Vec3::new(1.0, 0.0, 0.0)), // 右辺
     ];
     for (size, pos) in sides {
         commands.spawn((

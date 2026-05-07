@@ -105,7 +105,10 @@ impl BaseShapePreset {
                 ]
             }
             BaseShapePreset::Pentagon => {
-                let v: Vec<Vec2> = regular_polygon_vertices(5).into_iter().map(|p| -p).collect();
+                let v: Vec<Vec2> = regular_polygon_vertices(5)
+                    .into_iter()
+                    .map(|p| -p)
+                    .collect();
                 cycle_edges(&v)
             }
             BaseShapePreset::Hexagon => {
@@ -113,14 +116,20 @@ impl BaseShapePreset {
                 cycle_edges(&v)
             }
             BaseShapePreset::Star => {
-                let v: Vec<Vec2> = regular_polygon_vertices(5).into_iter().map(|p| -p).collect();
+                let v: Vec<Vec2> = regular_polygon_vertices(5)
+                    .into_iter()
+                    .map(|p| -p)
+                    .collect();
                 if v.len() != 5 {
                     return vec![];
                 }
                 let order = [0usize, 2, 4, 1, 3, 0];
                 order
                     .windows(2)
-                    .map(|w| Line { a: v[w[0]], b: v[w[1]] })
+                    .map(|w| Line {
+                        a: v[w[0]],
+                        b: v[w[1]],
+                    })
                     .collect()
             }
             BaseShapePreset::LShape => {

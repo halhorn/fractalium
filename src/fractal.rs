@@ -12,7 +12,7 @@ use bevy::render::render_resource::PrimitiveTopology;
 
 use crate::result_layer;
 use crate::share::PendingShareUrlSync;
-use crate::state::{FractalState, Line, Replica, FRACTAL_DEPTH_HARD_CAP};
+use crate::state::{FRACTAL_DEPTH_HARD_CAP, FractalState, Line, Replica};
 
 /// 1 回の展開でたどる再帰ノード数の上限（`collect_fractal_segments` と同オーダーの訪問回数）。
 #[cfg(target_arch = "wasm32")]
@@ -133,10 +133,7 @@ impl Plugin for FractalPlugin {
             // depth の予算 clamp はメッシュ構築の直前に行う（UI パスが Update より後のため）。
             .add_systems(
                 PostUpdate,
-                (
-                    clamp_fractal_depth_to_budget,
-                    update_fractal_mesh,
-                )
+                (clamp_fractal_depth_to_budget, update_fractal_mesh)
                     .chain()
                     .in_set(FractalPostUpdateSet::UpdateMesh),
             );
@@ -193,7 +190,11 @@ fn hue_to_linear_rgba(hue: f32) -> [f32; 4] {
 
 /// Result パネルの depth=1 親と同じ色（全レプリカを均等に色相分割）。
 pub fn result_replica_color(i: usize, total: usize) -> LinearRgba {
-    let hue = if total == 0 { 0.0 } else { i as f32 * 360.0 / total as f32 };
+    let hue = if total == 0 {
+        0.0
+    } else {
+        i as f32 * 360.0 / total as f32
+    };
     LinearRgba::from(Hsla::new(hue, 0.88, 0.58, 1.0))
 }
 
@@ -203,7 +204,10 @@ fn setup_fractal_mesh(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD);
+    let mesh = Mesh::new(
+        PrimitiveTopology::LineList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
     commands.spawn((
         FractalMesh,
         Mesh2d(meshes.add(mesh)),
@@ -328,10 +332,7 @@ mod budget_tests {
 
     #[test]
     fn empty_replicas_allows_abs_max_depth() {
-        assert_eq!(
-            max_depth_for_budget(100, 0, true),
-            FRACTAL_DEPTH_HARD_CAP
-        );
+        assert_eq!(max_depth_for_budget(100, 0, true), FRACTAL_DEPTH_HARD_CAP);
     }
 
     #[test]
