@@ -187,12 +187,12 @@ fn fmt_share_f32_scale(f: f32) -> String {
     fmt_share_inner(f as f64, false)
 }
 
-fn fmt_share_inner(v0: f64, snap_near_zero: bool) -> String {
+fn fmt_share_inner(v0: f64, clamp_tiny_geom: bool) -> String {
     if !v0.is_finite() {
         return "nan".to_string();
     }
     let v = round_to_sig_figs(v0, SHARE_URL_SIG_FIGS);
-    if snap_near_zero && v.abs() < SHARE_NEAR_ZERO_ABS {
+    if clamp_tiny_geom && v.abs() < SHARE_NEAR_ZERO_ABS {
         return "0.0".to_string();
     }
     if v == 0.0 {
@@ -215,7 +215,6 @@ fn encode_snapshot_readable(snap: &FractalSnapshot) -> Result<String, String> {
     pairs.push(format!("v={}", snap.v));
     pairs.push(format!("depth={}", snap.depth));
     pairs.push(format!("g={}", snap.show_all_generations as u8));
-    pairs.push(format!("snap={}", snap.snap_grid as u8));
     for [ax, ay, bx, by] in &snap.lines {
         pairs.push(format!(
             "line={},{},{},{}",
@@ -260,9 +259,10 @@ fn parse_readable_line(seg: &str) -> Result<[f32; 4], String> {
 
 fn parse_readable_replica(seg: &str) -> Result<ReplicaSnapshot, String> {
     let parts: Vec<&str> = seg.split(',').collect();
-    if parts.len() != 4 {
+    if parts.len() < 4 {
         return Err(format!(
-            "replica must have x:,y:,r:,s: fields ({})",
+            "replica must have x:,y:,r:,s: fields (at least {}, got {})",
+            4,
             parts.len()
         ));
     }
@@ -280,7 +280,9 @@ fn parse_readable_replica(seg: &str) -> Result<ReplicaSnapshot, String> {
             "y" => ty = Some(v.parse::<f32>().map_err(|_| format!("bad y:{v}"))?),
             "r" => rot = Some(v.parse::<f32>().map_err(|_| format!("bad r:{v}"))?),
             "s" => s = Some(v.parse::<f32>().map_err(|_| format!("bad s:{v}"))?),
-            _ => return Err(format!("unknown replica key {k}")),
+            _ => {
+                /* 将来の拡張フィールドは無視（前方互換） */
+            }
         }
     }
     Ok(ReplicaSnapshot {
@@ -295,7 +297,6 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
     let mut v = None;
     let mut depth = None;
     let mut show_all = None;
-    let mut snap_grid = None;
     let mut lines = Vec::<[f32; 4]>::new();
     let mut replicas = Vec::<ReplicaSnapshot>::new();
 
@@ -305,7 +306,7 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
         }
         let seg = raw_seg.trim();
         let Some((key, raw_val)) = seg.split_once('=') else {
-            return Err(format!("missing '=': {seg}"));
+            continue;
         };
         let val = decoded_pair_value(key, raw_val)?;
 
@@ -324,16 +325,11 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
                     _ => return Err(format!("bad g:{val}")),
                 })
             }
-            "snap" => {
-                snap_grid = Some(match val.as_str() {
-                    "1" | "true" => true,
-                    "0" | "false" => false,
-                    _ => return Err(format!("bad snap:{val}")),
-                })
-            }
             "line" => lines.push(parse_readable_line(&val)?),
             "replica" => replicas.push(parse_readable_replica(&val)?),
-            _ => return Err(format!("unknown share key '{key}'")),
+            _ => {
+                /* 未知キーは無視 */
+            }
         }
     }
 
@@ -341,7 +337,7 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
         v: v.ok_or("missing v")?,
         depth: depth.ok_or("missing depth")?,
         show_all_generations: show_all.unwrap_or(false),
-        snap_grid: snap_grid.unwrap_or(false),
+        snap_grid: false,
         lines,
         replicas,
     };
@@ -352,7 +348,7 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
     Ok(())
 }
 
-/// `v=…&depth=…&g=…&snap=…&line=…&replica=x:…,y:…,r:…,s:…`。フラグメントは `#` の直後にこの文字列を付ける。
+/// `v=…&depth=…&g=…&line=…&replica=…`。フラグメントは `#` の直後にこの文字列を付ける。
 pub fn encode_state(state: &FractalState) -> Result<String, String> {
     let snap = FractalSnapshot::from(state);
     encode_snapshot_readable(&snap)
@@ -714,6 +710,33 @@ mod tests {
     }
 
     #[test]
+    fn readable_decode_ignores_unknown_keys() {
+        let mut s = FractalState::default();
+        s.base_shape.lines.push(Line {
+            a: Vec2::new(-0.5, 0.0),
+            b: Vec2::new(0.5, 0.0),
+        });
+        s.replicas.push(Replica::default_new());
+        s.depth = 3;
+        let mut q = encode_state(&s).unwrap();
+        q.push_str("&future_key=abc&version_extra=2");
+        let mut out = FractalState::default();
+        decode_readable_share_query(&q, &mut out).unwrap();
+        assert_eq!(out.depth, 3);
+        assert_eq!(out.base_shape.lines.len(), 1);
+        assert_eq!(out.replicas.len(), 1);
+    }
+
+    #[test]
+    fn replica_ignores_unknown_fields() {
+        let r = parse_readable_replica("x:1.0,y:2.0,r:3.0,s:4.0,z:0.0").unwrap();
+        assert_eq!(r.tx, 1.0);
+        assert_eq!(r.ty, 2.0);
+        assert_eq!(r.rot, 3.0);
+        assert_eq!(r.s, 4.0);
+    }
+
+    #[test]
     fn fmt_six_sig_figs_trims_trailing_zeros() {
         assert_eq!(fmt_share_f32_geom(3.10000002f32), "3.1");
     }
@@ -725,12 +748,12 @@ mod tests {
     }
 
     #[test]
-    fn fmt_geom_snaps_tiny_noise_to_zero() {
+    fn fmt_geom_tiny_noise_clamps_to_zero() {
         assert_eq!(fmt_share_f32_geom(-0.000000044f32), "0.0");
     }
 
     #[test]
-    fn fmt_scale_does_not_snap_small_positive() {
+    fn fmt_scale_keeps_small_positive() {
         let s = fmt_share_f32_scale(0.05f32);
         assert_eq!(s, "0.05");
     }
