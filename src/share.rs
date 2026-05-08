@@ -1,4 +1,4 @@
-//! `#f=<base64url(json)>` 形式の URL フラグメントでフラクタル状態を共有する（サーバー不要）。
+//! フラグメント `#<可読クエリ>`（例: `#v=1&depth=…`）でフラクタル状態を共有する。**削除予定の** `#f=<base64url(json)>` の旧形式も読み取れる。
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
 use bevy::prelude::*;
@@ -76,7 +76,7 @@ impl From<&FractalState> for FractalSnapshot {
 }
 
 impl FractalSnapshot {
-    fn try_into_fractal_state(self) -> Result<FractalState, String> {
+    fn validate_constraints(&self) -> Result<(), String> {
         if self.v != SHARE_VERSION {
             return Err(format!("unsupported share version {}", self.v));
         }
@@ -94,14 +94,21 @@ impl FractalSnapshot {
                 return Err("non-finite line coordinate".into());
             }
         }
-        let mut replicas = Vec::with_capacity(self.replicas.len());
-        for r in self.replicas {
+        for r in &self.replicas {
             if !r.tx.is_finite() || !r.ty.is_finite() || !r.rot.is_finite() || !r.s.is_finite() {
                 return Err("non-finite replica field".into());
             }
             if r.s <= 0.0 {
                 return Err("replica scale must be positive".into());
             }
+        }
+        Ok(())
+    }
+
+    fn try_into_fractal_state(self) -> Result<FractalState, String> {
+        self.validate_constraints()?;
+        let mut replicas = Vec::with_capacity(self.replicas.len());
+        for r in self.replicas {
             let s = r.s.clamp(REPLICA_SCALE_MIN, REPLICA_SCALE_MAX);
             replicas.push(Replica {
                 translation: Vec2::new(r.tx, r.ty),
@@ -128,22 +135,236 @@ impl FractalSnapshot {
     }
 }
 
-/// 共有用ペイロード（URL-safe Base64、パディングなし）。
-pub fn encode_state(state: &FractalState) -> Result<String, String> {
-    let snap = FractalSnapshot::from(state);
-    let json = serde_json::to_vec(&snap).map_err(|e| e.to_string())?;
-    Ok(base64::Engine::encode(
-        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-        json,
-    ))
+const SHARE_URL_SIG_FIGS: i32 = 6;
+/// これ未満（有効桁丸め後）は座標・回転を URL では `0` にする（計算ギャップ用）。スケール `s` には使わない。
+const SHARE_NEAR_ZERO_ABS: f64 = 1e-7;
+
+fn round_to_sig_figs(x: f64, sig: i32) -> f64 {
+    if x == 0.0 || !x.is_finite() {
+        return x;
+    }
+    let abs_x = x.abs();
+    let log10 = abs_x.log10();
+    if !log10.is_finite() {
+        return x;
+    }
+    let m = log10.floor();
+    let scale = 10_f64.powf(sig as f64 - 1.0 - m);
+    (x * scale).round() / scale
 }
 
+fn trim_frac_zeros(s: &str) -> String {
+    if !s.contains('.') {
+        return s.to_string();
+    }
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s.is_empty() || s == "-" {
+        "0".to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+/// 共有 URL 上の float は常に小数点を含む（`3.0`）。整数だけのトークンにはしない。
+fn ensure_share_float_syntax(s: &str) -> String {
+    if s == "nan" || s.contains('.') {
+        return s.to_string();
+    }
+    if s.is_empty() || s == "-" {
+        "0.0".to_string()
+    } else {
+        format!("{s}.0")
+    }
+}
+
+/// 線分座標・replica の x,y,r（および将来の類似項目）。ごく微小値は `0.0`。
+fn fmt_share_f32_geom(f: f32) -> String {
+    fmt_share_inner(f as f64, true)
+}
+
+/// replica の `s`。**正の検証があるため「近いから 0」にはしない。
+fn fmt_share_f32_scale(f: f32) -> String {
+    fmt_share_inner(f as f64, false)
+}
+
+fn fmt_share_inner(v0: f64, snap_near_zero: bool) -> String {
+    if !v0.is_finite() {
+        return "nan".to_string();
+    }
+    let v = round_to_sig_figs(v0, SHARE_URL_SIG_FIGS);
+    if snap_near_zero && v.abs() < SHARE_NEAR_ZERO_ABS {
+        return "0.0".to_string();
+    }
+    if v == 0.0 {
+        return "0.0".to_string();
+    }
+    let abs_v = v.abs();
+    let log10 = abs_v.log10();
+    if !log10.is_finite() {
+        return "0.0".to_string();
+    }
+    let m_i = log10.floor() as i32;
+    let frac_digits = ((SHARE_URL_SIG_FIGS - 1) - m_i).max(0).min(20) as usize;
+    let rendered = format!("{:.*}", frac_digits, v);
+    ensure_share_float_syntax(&trim_frac_zeros(&rendered))
+}
+
+fn encode_snapshot_readable(snap: &FractalSnapshot) -> Result<String, String> {
+    snap.validate_constraints()?;
+    let mut pairs = Vec::new();
+    pairs.push(format!("v={}", snap.v));
+    pairs.push(format!("depth={}", snap.depth));
+    pairs.push(format!("g={}", snap.show_all_generations as u8));
+    pairs.push(format!("snap={}", snap.snap_grid as u8));
+    for [ax, ay, bx, by] in &snap.lines {
+        pairs.push(format!(
+            "line={},{},{},{}",
+            fmt_share_f32_geom(*ax),
+            fmt_share_f32_geom(*ay),
+            fmt_share_f32_geom(*bx),
+            fmt_share_f32_geom(*by),
+        ));
+    }
+    for r in &snap.replicas {
+        pairs.push(format!(
+            "replica=x:{},y:{},r:{},s:{}",
+            fmt_share_f32_geom(r.tx),
+            fmt_share_f32_geom(r.ty),
+            fmt_share_f32_geom(r.rot),
+            fmt_share_f32_scale(r.s),
+        ));
+    }
+    Ok(pairs.join("&"))
+}
+
+/// 値のみ URL 復号してからパースする（ユーザーがブラウザで自動エンコードした場合）。
+fn decoded_pair_value(_key: &str, value: &str) -> Result<String, String> {
+    let decoded = urlencoding::decode(value).map_err(|e| e.to_string())?;
+    Ok(decoded.into_owned())
+}
+
+fn parse_readable_line(seg: &str) -> Result<[f32; 4], String> {
+    let parts: Vec<&str> = seg.split(',').collect();
+    if parts.len() != 4 {
+        return Err(format!("line must have 4 floats, got {}", parts.len()));
+    }
+    let mut out = [0.0_f32; 4];
+    for (i, p) in parts.iter().enumerate() {
+        out[i] = p
+            .trim()
+            .parse::<f32>()
+            .map_err(|_| format!("invalid line float: {p}"))?;
+    }
+    Ok(out)
+}
+
+fn parse_readable_replica(seg: &str) -> Result<ReplicaSnapshot, String> {
+    let parts: Vec<&str> = seg.split(',').collect();
+    if parts.len() != 4 {
+        return Err(format!(
+            "replica must have x:,y:,r:,s: fields ({})",
+            parts.len()
+        ));
+    }
+    let mut tx = None;
+    let mut ty = None;
+    let mut rot = None;
+    let mut s = None;
+    for p in parts {
+        let (k, v) = p
+            .split_once(':')
+            .ok_or_else(|| format!("replica segment missing ':' {p}"))?;
+        let v = v.trim();
+        match k.trim() {
+            "x" => tx = Some(v.parse::<f32>().map_err(|_| format!("bad x:{v}"))?),
+            "y" => ty = Some(v.parse::<f32>().map_err(|_| format!("bad y:{v}"))?),
+            "r" => rot = Some(v.parse::<f32>().map_err(|_| format!("bad r:{v}"))?),
+            "s" => s = Some(v.parse::<f32>().map_err(|_| format!("bad s:{v}"))?),
+            _ => return Err(format!("unknown replica key {k}")),
+        }
+    }
+    Ok(ReplicaSnapshot {
+        tx: tx.ok_or("replica missing x")?,
+        ty: ty.ok_or("replica missing y")?,
+        rot: rot.ok_or("replica missing r")?,
+        s: s.ok_or("replica missing s")?,
+    })
+}
+
+fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<(), String> {
+    let mut v = None;
+    let mut depth = None;
+    let mut show_all = None;
+    let mut snap_grid = None;
+    let mut lines = Vec::<[f32; 4]>::new();
+    let mut replicas = Vec::<ReplicaSnapshot>::new();
+
+    for raw_seg in query.split('&') {
+        if raw_seg.is_empty() {
+            continue;
+        }
+        let seg = raw_seg.trim();
+        let Some((key, raw_val)) = seg.split_once('=') else {
+            return Err(format!("missing '=': {seg}"));
+        };
+        let val = decoded_pair_value(key, raw_val)?;
+
+        match key {
+            "v" => {
+                v = Some(
+                    val.parse::<u32>()
+                        .map_err(|_| format!("bad v:{val}"))?,
+                )
+            }
+            "depth" => depth = Some(val.parse::<u32>().map_err(|_| format!("bad depth:{val}"))?),
+            "g" => {
+                show_all = Some(match val.as_str() {
+                    "1" | "true" => true,
+                    "0" | "false" => false,
+                    _ => return Err(format!("bad g:{val}")),
+                })
+            }
+            "snap" => {
+                snap_grid = Some(match val.as_str() {
+                    "1" | "true" => true,
+                    "0" | "false" => false,
+                    _ => return Err(format!("bad snap:{val}")),
+                })
+            }
+            "line" => lines.push(parse_readable_line(&val)?),
+            "replica" => replicas.push(parse_readable_replica(&val)?),
+            _ => return Err(format!("unknown share key '{key}'")),
+        }
+    }
+
+    let snap = FractalSnapshot {
+        v: v.ok_or("missing v")?,
+        depth: depth.ok_or("missing depth")?,
+        show_all_generations: show_all.unwrap_or(false),
+        snap_grid: snap_grid.unwrap_or(false),
+        lines,
+        replicas,
+    };
+
+    let new_state = snap.try_into_fractal_state()?;
+    *state = new_state;
+    crate::fractal::clamp_fractal_state_depth(state);
+    Ok(())
+}
+
+/// `v=…&depth=…&g=…&snap=…&line=…&replica=x:…,y:…,r:…,s:…`。フラグメントは `#` の直後にこの文字列を付ける。
+pub fn encode_state(state: &FractalState) -> Result<String, String> {
+    let snap = FractalSnapshot::from(state);
+    encode_snapshot_readable(&snap)
+}
+
+/// **Legacy** `#f=<base64url(json)>`. 入力はトークンのみ。**削除予定**。
 pub fn decode_and_apply(token: &str, state: &mut FractalState) -> Result<(), String> {
     let bytes = base64::Engine::decode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         token.trim(),
     )
-    .map_err(|_| "invalid base64".to_string())?;
+    .map_err(|_| "invalid base64 (legacy)".to_string())?;
     let snap: FractalSnapshot = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     let new_state = snap.try_into_fractal_state()?;
     *state = new_state;
@@ -151,15 +372,15 @@ pub fn decode_and_apply(token: &str, state: &mut FractalState) -> Result<(), Str
     Ok(())
 }
 
-pub fn share_url_from_token(token: &str) -> Result<String, String> {
+pub fn share_url_from_token(query: &str) -> Result<String, String> {
     #[cfg(target_arch = "wasm32")]
     {
         let base = location_href_without_hash()?;
-        Ok(format!("{base}#f={token}"))
+        Ok(format!("{base}#{query}"))
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Ok(format!("#f={token}"))
+        Ok(format!("#{query}"))
     }
 }
 
@@ -177,33 +398,39 @@ fn location_href_without_hash() -> Result<String, String> {
     Ok(base)
 }
 
+/// `#` の直後の可読クエリ（`v=…&…`）。`#f=…` やそれ以外は None。
 #[cfg(target_arch = "wasm32")]
-fn parse_location_hash_token() -> Option<String> {
+fn parse_location_share_query() -> Option<String> {
     let window = web_sys::window()?;
     let hash = window.location().hash().ok()?;
-    let h = hash.strip_prefix('#')?;
-    let rest = h.strip_prefix("f=")?;
-    let token = rest.split('&').next()?.trim();
-    if token.is_empty() {
-        None
+    if hash.len() <= 1 {
+        return None;
+    }
+    let h = hash.strip_prefix('#')?.trim();
+    if h.starts_with("f=") {
+        return None;
+    }
+    if h.starts_with("v=") {
+        Some(h.to_string())
     } else {
-        Some(token.to_string())
+        None
     }
 }
 
 /// アドレスバーのフラグメントを現在の共有形式に合わせる（履歴は `replaceState` で置き換え）。
 #[cfg(target_arch = "wasm32")]
-pub fn set_location_share_token(token: &str) -> Result<(), String> {
+pub fn set_location_share_query(query: &str) -> Result<(), String> {
     let window = web_sys::window().ok_or("no window")?;
     let loc = window.location();
     let base = location_href_without_hash()?;
-    let new_url = format!("{base}#f={token}");
+    let new_url = format!("{base}#{query}");
     let hist = window.history().map_err(|_| "history unavailable")?;
+    let hash_fallback = query.to_string();
     if hist
         .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_url))
         .is_err()
     {
-        loc.set_hash(&format!("f={token}"))
+        loc.set_hash(&hash_fallback)
             .map_err(|_| "set_hash failed")?;
     }
     Ok(())
@@ -224,18 +451,18 @@ fn flush_share_url_after_fractal_mesh(
     }
     pending.0 = false;
 
-    let Ok(token) = encode_state(&state) else {
+    let Ok(query) = encode_state(&state) else {
         return;
     };
-    if last_token.as_deref() == Some(token.as_str()) {
+    if last_token.as_deref() == Some(query.as_str()) {
         return;
     }
-    if parse_location_hash_token().as_deref() == Some(token.as_str()) {
-        *last_token = Some(token);
+    if parse_location_share_query().as_deref() == Some(query.as_str()) {
+        *last_token = Some(query);
         return;
     }
-    if set_location_share_token(&token).is_ok() {
-        *last_token = Some(token);
+    if set_location_share_query(&query).is_ok() {
+        *last_token = Some(query);
     }
 }
 
@@ -414,10 +641,34 @@ fn hydrate_from_url(
     mut draw_state: ResMut<DrawState>,
     mut pending_fit: ResMut<PendingResultCameraFit>,
 ) {
-    let Some(token) = parse_location_hash_token() else {
+    let Some(window) = web_sys::window() else {
         return;
     };
-    if decode_and_apply(&token, &mut state).is_ok() {
+    let Ok(hash) = window.location().hash() else {
+        return;
+    };
+    if hash.len() <= 1 {
+        return;
+    }
+    let Some(h) = hash.strip_prefix('#') else {
+        return;
+    };
+    let h_trim = h.trim();
+
+    let applied = if let Some(rest) = h_trim.strip_prefix("f=") {
+        let tok = rest.split('&').next().unwrap_or(rest).trim();
+        if tok.is_empty() {
+            None
+        } else {
+            Some(decode_and_apply(tok, &mut *state))
+        }
+    } else if h_trim.starts_with("v=") {
+        Some(decode_readable_share_query(h_trim, &mut *state))
+    } else {
+        None
+    };
+
+    if applied.is_some_and(|r| r.is_ok()) {
         undo.clear();
         placement.selected = None;
         placement.clipboard = None;
@@ -429,18 +680,19 @@ fn hydrate_from_url(
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine;
     use super::*;
 
     #[test]
     fn vgd_accepts_public_site() {
         assert!(vgd_accepts_share_page_url(
-            "https://example.com/app#f=token"
+            "https://example.com/app#v=1"
         ));
     }
 
     #[test]
     fn vgd_rejects_loopback() {
-        assert!(!vgd_accepts_share_page_url("http://127.0.0.1:8080/#f=ab"));
+        assert!(!vgd_accepts_share_page_url("http://127.0.0.1:8080/#v=1"));
     }
 
     #[test]
@@ -452,10 +704,58 @@ mod tests {
         });
         s.replicas.push(Replica::default_new());
         s.depth = 3;
-        let t = encode_state(&s).unwrap();
+        let q = encode_state(&s).unwrap();
+        assert!(q.starts_with("v="), "readable body: {q}");
         let mut out = FractalState::default();
-        decode_and_apply(&t, &mut out).unwrap();
+        decode_readable_share_query(&q, &mut out).unwrap();
         assert_eq!(out.depth, 3);
+        assert_eq!(out.base_shape.lines.len(), 1);
+        assert_eq!(out.replicas.len(), 1);
+    }
+
+    #[test]
+    fn fmt_six_sig_figs_trims_trailing_zeros() {
+        assert_eq!(fmt_share_f32_geom(3.10000002f32), "3.1");
+    }
+
+    #[test]
+    fn fmt_float_always_includes_decimal_point() {
+        assert_eq!(fmt_share_f32_geom(3.0f32), "3.0");
+        assert_eq!(fmt_share_f32_scale(1.0f32), "1.0");
+    }
+
+    #[test]
+    fn fmt_geom_snaps_tiny_noise_to_zero() {
+        assert_eq!(fmt_share_f32_geom(-0.000000044f32), "0.0");
+    }
+
+    #[test]
+    fn fmt_scale_does_not_snap_small_positive() {
+        let s = fmt_share_f32_scale(0.05f32);
+        assert_eq!(s, "0.05");
+    }
+
+    #[test]
+    fn legacy_base64_decode_still_works() {
+        let snap = FractalSnapshot {
+            v: SHARE_VERSION,
+            depth: 2,
+            show_all_generations: true,
+            snap_grid: false,
+            lines: vec![[-1.0, 0.0, 1.0, 0.0]],
+            replicas: vec![ReplicaSnapshot {
+                tx: 0.25,
+                ty: -0.1,
+                rot: 0.5,
+                s: 0.75,
+            }],
+        };
+        let json = serde_json::to_vec(&snap).unwrap();
+        let tok = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&json);
+        let mut out = FractalState::default();
+        decode_and_apply(&tok, &mut out).unwrap();
+        assert_eq!(out.depth, 2);
+        assert!(out.show_all_generations);
         assert_eq!(out.base_shape.lines.len(), 1);
         assert_eq!(out.replicas.len(), 1);
     }
