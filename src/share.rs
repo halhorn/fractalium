@@ -4,15 +4,6 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_arch = "wasm32")]
-use std::sync::{Arc, Mutex};
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::{JsCast, JsValue};
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_futures::JsFuture;
-#[cfg(target_arch = "wasm32")]
-use web_sys::{Headers, Request, RequestInit, RequestMode, Response};
 
 #[cfg(target_arch = "wasm32")]
 use crate::edit::DrawState;
@@ -462,155 +453,6 @@ fn flush_share_url_after_fractal_mesh(
     }
 }
 
-// --- WASM: v.gd で共有 URL を短くしてからクリップボードへ（直前フレームの fetch 結果を 1 システムで処理）
-
-const VGD_CREATE: &str = "https://v.gd/create.php";
-
-/// v.gd はループバック・プライベート IP・`localhost` ホストを短縮対象にしない。
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-fn vgd_accepts_share_page_url(full_url: &str) -> bool {
-    use std::net::{Ipv4Addr, Ipv6Addr};
-
-    let base = full_url.split('#').next().unwrap_or(full_url);
-    let rest = match base
-        .strip_prefix("http://")
-        .or_else(|| base.strip_prefix("https://"))
-    {
-        Some(r) => r,
-        None => return false,
-    };
-    let before_path = rest.split(&['/', '?'][..]).next().unwrap_or(rest);
-    let before_path = before_path
-        .rsplit_once('@')
-        .map(|(_, h)| h)
-        .unwrap_or(before_path);
-    let host = if let (Some(l), Some(r)) = (before_path.find('['), before_path.find(']')) {
-        before_path.get(l + 1..r).unwrap_or("").to_string()
-    } else if let Some((h, tail)) = before_path.rsplit_once(':') {
-        if tail.chars().all(|c| c.is_ascii_digit()) && !h.contains(']') {
-            h.to_string()
-        } else {
-            before_path.to_string()
-        }
-    } else {
-        before_path.to_string()
-    };
-    let host = host.to_ascii_lowercase();
-    if host == "localhost" || host.ends_with(".localhost") {
-        return false;
-    }
-    if let Ok(ip) = host.parse::<Ipv4Addr>() {
-        return !ip.is_loopback() && !ip.is_private() && !ip.is_link_local();
-    }
-    if let Ok(ip) = host.parse::<Ipv6Addr>() {
-        return !ip.is_loopback() && !ip.is_unicast_link_local();
-    }
-    true
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Resource)]
-pub struct ShareShortenWasm {
-    pub(crate) pending: Arc<Mutex<Option<Result<String, String>>>>,
-    pub busy: bool,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Default for ShareShortenWasm {
-    fn default() -> Self {
-        Self {
-            pending: Arc::new(Mutex::new(None)),
-            busy: false,
-        }
-    }
-}
-
-/// Share のクリックに渡す参照束ね（ブラウザ版のみ）。
-#[cfg(target_arch = "wasm32")]
-pub struct ShareWasmBundle<'a> {
-    pub wasm: &'a mut ShareShortenWasm,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[derive(Clone, Copy)]
-pub struct ShareWasmBundle<'a> {
-    _p: core::marker::PhantomData<*const &'a ()>,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Deserialize)]
-struct VgdJson {
-    shorturl: Option<String>,
-    errormessage: Option<String>,
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn wasm_vgd_post_form(body: &str) -> Result<String, String> {
-    let window = web_sys::window().ok_or_else(|| "no window".to_string())?;
-    let opts = RequestInit::new();
-    opts.set_method("POST");
-    opts.set_mode(RequestMode::Cors);
-    opts.set_body(&JsValue::from_str(body));
-    let headers = Headers::new().map_err(|_| "headers init failed".to_string())?;
-    headers
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .map_err(|_| "Content-Type header".to_string())?;
-    opts.set_headers(&headers);
-    let req = Request::new_with_str_and_init(VGD_CREATE, &opts)
-        .map_err(|_| "request build".to_string())?;
-    let js_resp = JsFuture::from(window.fetch_with_request(&req))
-        .await
-        .map_err(|_| "network error".to_string())?;
-    let resp: Response = js_resp
-        .dyn_into()
-        .map_err(|_| "invalid fetch response".to_string())?;
-    if !resp.ok() {
-        return Err(format!("HTTP {}", resp.status()));
-    }
-    let text = JsFuture::from(
-        resp.text()
-            .map_err(|_| "response has no body".to_string())?,
-    )
-    .await
-    .map_err(|_| "could not read body".to_string())?;
-    text.as_string().ok_or_else(|| "empty body".to_string())
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn shorten_via_vgd(long_url: &str) -> Result<String, String> {
-    if !vgd_accepts_share_page_url(long_url) {
-        return Ok(long_url.to_string());
-    }
-    let encoded = urlencoding::encode(long_url);
-    let body = format!("format=json&url={encoded}");
-    let text = wasm_vgd_post_form(&body).await?;
-    let parsed: VgdJson = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if let Some(s) = parsed.shorturl.filter(|u| !u.is_empty()) {
-        return Ok(s);
-    }
-    if let Some(m) = parsed.errormessage {
-        return Err(m);
-    }
-    Err("unexpected v.gd response".to_string())
-}
-
-/// `true` なら短縮処理をキューした（`false` は既に処理中）。
-#[cfg(target_arch = "wasm32")]
-pub fn request_share_short_link_start(wasm: &mut ShareShortenWasm, long_url: String) -> bool {
-    if wasm.busy {
-        return false;
-    }
-    wasm.busy = true;
-    let sink = wasm.pending.clone();
-    wasm_bindgen_futures::spawn_local(async move {
-        let out = shorten_via_vgd(&long_url).await;
-        if let Ok(mut slot) = sink.lock() {
-            *slot = Some(out);
-        }
-    });
-    true
-}
-
 pub struct SharePlugin;
 
 impl Plugin for SharePlugin {
@@ -618,7 +460,6 @@ impl Plugin for SharePlugin {
         app.init_resource::<PendingShareUrlSync>();
         #[cfg(target_arch = "wasm32")]
         {
-            app.init_resource::<ShareShortenWasm>();
             app.add_systems(Startup, hydrate_from_url);
             app.add_systems(
                 PostUpdate,
@@ -678,18 +519,6 @@ fn hydrate_from_url(
 mod tests {
     use base64::Engine;
     use super::*;
-
-    #[test]
-    fn vgd_accepts_public_site() {
-        assert!(vgd_accepts_share_page_url(
-            "https://example.com/app#v=1"
-        ));
-    }
-
-    #[test]
-    fn vgd_rejects_loopback() {
-        assert!(!vgd_accepts_share_page_url("http://127.0.0.1:8080/#v=1"));
-    }
 
     #[test]
     fn round_trip_defaultish() {

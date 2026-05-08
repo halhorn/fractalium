@@ -17,8 +17,6 @@ use crate::fractal::{clamp_fractal_state_depth, max_depth_for_budget, result_rep
 use crate::fractal_presets::FractalPreset;
 use crate::seed_shape::BaseShapePreset;
 use crate::share;
-#[cfg(target_arch = "wasm32")]
-use crate::share::{ShareShortenWasm, ShareWasmBundle};
 use crate::state::{
     CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, ScreenRect, UiLayout, UndoStack,
@@ -87,16 +85,6 @@ impl Plugin for UiPlugin {
         app.init_resource::<EguiToast>()
             .init_resource::<PendingResultCameraFit>();
 
-        #[cfg(target_arch = "wasm32")]
-        app.add_systems(EguiPrimaryContextPass, finalize_share_shorten);
-
-        #[cfg(target_arch = "wasm32")]
-        app.add_systems(
-            EguiPrimaryContextPass,
-            params_panel.after(finalize_share_shorten),
-        );
-
-        #[cfg(not(target_arch = "wasm32"))]
         app.add_systems(EguiPrimaryContextPass, params_panel);
 
         app.add_systems(
@@ -104,38 +92,6 @@ impl Plugin for UiPlugin {
             fit_result_camera_if_requested.after(params_panel),
         );
     }
-}
-
-/// v.gd から戻った短縮結果をクリップボードへ（egui パス内で params より先に実行）。
-#[cfg(target_arch = "wasm32")]
-fn finalize_share_shorten(
-    mut contexts: EguiContexts,
-    mut toast: ResMut<EguiToast>,
-    mut wasm: ResMut<ShareShortenWasm>,
-) -> Result {
-    let ctx = contexts.ctx_mut()?;
-    let done = wasm.pending.lock().ok().and_then(|mut g| g.take());
-    let Some(result) = done else {
-        return Ok(());
-    };
-    wasm.busy = false;
-    match result {
-        Ok(url) => {
-            ctx.copy_text(url.clone());
-            if url.contains("v.gd/") {
-                toast.show(ctx, "Short link copied");
-            } else {
-                toast.show(
-                    ctx,
-                    "Full link copied (shorteners only accept public http(s) URLs)",
-                );
-            }
-        }
-        Err(msg) => {
-            toast.show(ctx, format!("Short link failed: {msg}"));
-        }
-    }
-    Ok(())
 }
 
 fn params_panel(
@@ -149,7 +105,6 @@ fn params_panel(
     mut ui_layout: ResMut<UiLayout>,
     mut toast: ResMut<EguiToast>,
     mut pending_result_fit: ResMut<PendingResultCameraFit>,
-    #[cfg(target_arch = "wasm32")] mut share_wasm: ResMut<ShareShortenWasm>,
     mut edit_cam: Query<
         &mut Camera,
         (
@@ -186,14 +141,6 @@ fn params_panel(
 
     let is_narrow = win_w < 700.0;
 
-    #[cfg(not(target_arch = "wasm32"))]
-    let mut share_bundle = None::<crate::share::ShareWasmBundle<'static>>;
-    #[cfg(target_arch = "wasm32")]
-    let mut share_bundle = Some(ShareWasmBundle {
-        wasm: &mut *share_wasm,
-    });
-    let share_web = &mut share_bundle;
-
     let (edit_egui_rect, placement_egui_rect, result_egui_rect) = if is_narrow {
         layout_narrow(
             ctx,
@@ -206,7 +153,6 @@ fn params_panel(
             &mut ui_layout,
             &mut toast,
             &mut pending_result_fit,
-            share_web,
         )
     } else {
         layout_wide(
@@ -220,7 +166,6 @@ fn params_panel(
             &mut ui_layout,
             &mut toast,
             &mut pending_result_fit,
-            share_web,
         )
     };
 
@@ -257,9 +202,6 @@ fn layout_wide(
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
     pending_result_fit: &mut PendingResultCameraFit,
-    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))] share_web: &mut Option<
-        crate::share::ShareWasmBundle<'_>,
-    >,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
     let params_w = if ui_layout.params_collapsed {
@@ -297,7 +239,6 @@ fn layout_wide(
                         undo_stack,
                         toast,
                         pending_result_fit,
-                        share_web,
                     );
                 });
             ui.separator();
@@ -348,9 +289,6 @@ fn layout_narrow(
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
     pending_result_fit: &mut PendingResultCameraFit,
-    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))] share_web: &mut Option<
-        crate::share::ShareWasmBundle<'_>,
-    >,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
@@ -444,7 +382,6 @@ fn layout_narrow(
                 undo_stack,
                 toast,
                 pending_result_fit,
-                share_web,
             );
         });
 
@@ -555,9 +492,6 @@ fn global_controls_bar(
     undo_stack: &mut UndoStack,
     toast: &mut EguiToast,
     pending_result_fit: &mut PendingResultCameraFit,
-    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))] share_web: &mut Option<
-        crate::share::ShareWasmBundle<'_>,
-    >,
 ) {
     ui.add_space(4.0);
     let row_h = ui.spacing().interact_size.y;
@@ -615,33 +549,14 @@ fn global_controls_bar(
             |ui| {
                 if ui
                     .add(egui::Button::new("Share"))
-                    .on_hover_text("copy short sharing link")
+                    .on_hover_text("copy sharing link")
                     .clicked()
                 {
                     match share::encode_state(state) {
                         Ok(token) => match share::share_url_from_token(&token) {
                             Ok(url) => {
-                                #[cfg(target_arch = "wasm32")]
-                                {
-                                    if let Some(b) = share_web.as_mut() {
-                                        if share::request_share_short_link_start(
-                                            b.wasm,
-                                            url.clone(),
-                                        ) {
-                                            toast.show(ui.ctx(), "Generating short link…");
-                                        } else {
-                                            toast.show(ui.ctx(), "Still generating…");
-                                        }
-                                    } else {
-                                        ui.ctx().copy_text(url);
-                                        toast.show(ui.ctx(), "Link copied");
-                                    }
-                                }
-                                #[cfg(not(target_arch = "wasm32"))]
-                                {
-                                    ui.ctx().copy_text(url);
-                                    toast.show(ui.ctx(), "Link copied");
-                                }
+                                ui.ctx().copy_text(url);
+                                toast.show(ui.ctx(), "Link copied");
                             }
                             Err(e) => bevy::log::warn!("share URL: {e}"),
                         },
