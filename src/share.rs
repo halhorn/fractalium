@@ -359,15 +359,71 @@ pub fn decode_and_apply(token: &str, state: &mut FractalState) -> Result<(), Str
     Ok(())
 }
 
+/// `Share` からコピーする完全 URL 用: `location` の search に `from=share` を付ける（無い場合のみ）。
+fn href_with_from_share_query(base_href_without_fragment: &str) -> String {
+    if query_has_from_share(base_href_without_fragment) {
+        return base_href_without_fragment.to_string();
+    }
+    if let Some((path, q)) = base_href_without_fragment.split_once('?') {
+        format!("{path}?{q}&from=share")
+    } else {
+        format!("{base_href_without_fragment}?from=share")
+    }
+}
+
+fn query_has_from_share(href: &str) -> bool {
+    let Some((_path, query)) = href.split_once('?') else {
+        return false;
+    };
+    for pair in query.split('&') {
+        let mut parts = pair.splitn(2, '=');
+        let Some(name) = parts.next() else {
+            continue;
+        };
+        if name != "from" {
+            continue;
+        }
+        let value = parts.next().unwrap_or("");
+        if value == "share" {
+            return true;
+        }
+    }
+    false
+}
+
+/// メッシュ同期でアドレスバーを書き換えるとき、`search` の `from=share` を落とす（共有経由ページで編集したあと）。
+fn strip_from_share_query_param(base_href_without_fragment: &str) -> String {
+    let Some((path, query)) = base_href_without_fragment.split_once('?') else {
+        return base_href_without_fragment.to_string();
+    };
+    let kept: Vec<&str> = query
+        .split('&')
+        .filter(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            let Some(name) = parts.next() else {
+                return true;
+            };
+            let value = parts.next().unwrap_or("");
+            !(name == "from" && value == "share")
+        })
+        .collect();
+    if kept.is_empty() {
+        path.to_string()
+    } else {
+        format!("{}?{}", path, kept.join("&"))
+    }
+}
+
 pub fn share_url_from_token(query: &str) -> Result<String, String> {
     #[cfg(target_arch = "wasm32")]
     {
         let base = location_href_without_hash()?;
+        let base = href_with_from_share_query(&base);
         Ok(format!("{base}#{query}"))
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Ok(format!("#{query}"))
+        Ok(format!("?from=share#{query}"))
     }
 }
 
@@ -410,6 +466,7 @@ pub fn set_location_share_query(query: &str) -> Result<(), String> {
     let window = web_sys::window().ok_or("no window")?;
     let loc = window.location();
     let base = location_href_without_hash()?;
+    let base = strip_from_share_query_param(&base);
     let new_url = format!("{base}#{query}");
     let hist = window.history().map_err(|_| "history unavailable")?;
     let hash_fallback = query.to_string();
@@ -519,6 +576,42 @@ fn hydrate_from_url(
 mod tests {
     use base64::Engine;
     use super::*;
+
+    #[test]
+    fn strip_from_share_query_param_removes_only_marker() {
+        assert_eq!(
+            strip_from_share_query_param("https://x.example/y"),
+            "https://x.example/y"
+        );
+        assert_eq!(
+            strip_from_share_query_param("https://x.example/y?from=share"),
+            "https://x.example/y"
+        );
+        assert_eq!(
+            strip_from_share_query_param("https://x.example/y?a=1&from=share"),
+            "https://x.example/y?a=1"
+        );
+        assert_eq!(
+            strip_from_share_query_param("https://x.example/y?from=share&a=1"),
+            "https://x.example/y?a=1"
+        );
+    }
+
+    #[test]
+    fn from_share_query_appends_and_dedupes() {
+        assert_eq!(
+            href_with_from_share_query("https://example.com/app"),
+            "https://example.com/app?from=share"
+        );
+        assert_eq!(
+            href_with_from_share_query("https://example.com/app?x=1"),
+            "https://example.com/app?x=1&from=share"
+        );
+        assert_eq!(
+            href_with_from_share_query("https://example.com/app?from=share"),
+            "https://example.com/app?from=share"
+        );
+    }
 
     #[test]
     fn round_trip_defaultish() {
