@@ -20,9 +20,52 @@ use crate::{
     view::result_export_projection,
 };
 
-/// 「Download image」から送信する。
+/// Share メニューが開いたときに送信し、Result PNG の生成だけを開始する（保存は行わない）。
 #[derive(Message)]
 pub struct RequestResultImageExport;
+
+/// 生成済み PNG。Web では `navigator.share` / ダウンロードがユーザー操作に直結する必要があるため、ここに溜めてから Download 押下で渡す。
+#[derive(Resource)]
+pub struct PreparedResultImage {
+    pub state: PreparedResultImageState,
+    /// Share サブメニューが 1 フレーム前まで開いていたか（開閉エッジ検出用）。
+    pub share_menu_was_open: bool,
+    /// `ResultExportBusy` と同期（egui システムのパラメータ数制限のためここから読む）。
+    pub export_phase: ExportPhase,
+}
+
+impl Default for PreparedResultImage {
+    fn default() -> Self {
+        Self {
+            state: PreparedResultImageState::None,
+            share_menu_was_open: false,
+            export_phase: ExportPhase::Idle,
+        }
+    }
+}
+
+pub enum PreparedResultImageState {
+    None,
+    Preparing,
+    Ready { png: Vec<u8>, filename: String },
+}
+
+impl Default for PreparedResultImageState {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Download 押下時に同フレームで呼ぶ（user activation を維持するため）。
+pub fn deliver_prepared_result_png(
+    prepared: &mut PreparedResultImage,
+    deferred: &mut DeferredToast,
+) {
+    if let PreparedResultImageState::Ready { png, filename } = std::mem::take(&mut prepared.state)
+    {
+        offer_png(&png, &filename, deferred);
+    }
+}
 
 #[derive(Component)]
 struct ResultExportCamera;
@@ -40,7 +83,7 @@ const EXPORT_LINE_WIDTH_PX: f32 = 4.0;
 const EXPORT_WARMUP_FRAMES: u8 = 3;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ExportPhase {
+pub enum ExportPhase {
     Idle,
     /// 残フレーム数（1 で次の進行時にスクショ）。
     Warm(u8),
@@ -54,7 +97,7 @@ impl Default for ExportPhase {
 }
 
 #[derive(Default, Resource)]
-struct ResultExportBusy(pub ExportPhase);
+pub struct ResultExportBusy(pub ExportPhase);
 
 pub struct ResultExportPlugin;
 
@@ -62,6 +105,7 @@ impl Plugin for ResultExportPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestResultImageExport>()
             .init_resource::<ResultExportBusy>()
+            .init_resource::<PreparedResultImage>()
             .add_systems(Startup, setup_result_export_camera)
             .add_systems(Update, result_export_pipeline);
     }
@@ -127,17 +171,28 @@ fn png_bytes_from_image(img: Image) -> Result<Vec<u8>, String> {
 }
 
 fn default_export_filename() -> String {
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
+    let ms = export_filename_millis();
     format!("fractalium-result-{ms}.png")
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn offer_png(png_bytes: &[u8], deferred: &mut DeferredToast) {
+fn export_filename_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+/// WebAssembly では `SystemTime::now` が利用できない（パニックする）。
+#[cfg(target_arch = "wasm32")]
+fn export_filename_millis() -> u128 {
+    js_sys::Date::now() as u128
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
     match rfd::FileDialog::new()
-        .set_file_name(&default_export_filename())
+        .set_file_name(filename)
         .save_file()
     {
         Some(path) => match std::fs::write(&path, png_bytes) {
@@ -153,54 +208,10 @@ fn offer_png(png_bytes: &[u8], deferred: &mut DeferredToast) {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn try_web_share_png(png_bytes: &[u8]) -> bool {
-    use js_sys::{Array, Function, Reflect, Uint8Array};
-    use wasm_bindgen::{JsCast, JsValue};
-
-    let Some(window) = web_sys::window() else {
-        return false;
-    };
-    let nav = window.navigator();
-    let Ok(share) = Reflect::get(&nav, &JsValue::from_str("share")) else {
-        return false;
-    };
-    if share.is_undefined() || share.is_null() {
-        return false;
-    }
-    let Some(share_fn) = share.dyn_ref::<Function>() else {
-        return false;
-    };
-
-    let parts = Array::of1(Uint8Array::from(png_bytes).as_ref());
-    let Ok(file) = web_sys::File::new_with_u8_array_sequence(&parts, "fractalium-result.png") else {
-        return false;
-    };
-    let files = Array::of1(file.as_ref());
-    let data = js_sys::Object::new();
-    let Ok(true) = Reflect::set(&data, &JsValue::from_str("files"), files.as_ref()) else {
-        return false;
-    };
-    let Ok(true) = Reflect::set(
-        &data,
-        &JsValue::from_str("title"),
-        &JsValue::from_str("Fractalium"),
-    ) else {
-        return false;
-    };
-    let arg = JsValue::from(data);
-    let this_arg = JsValue::from(nav);
-    Reflect::apply(share_fn, &this_arg, &Array::of1(&arg))
-        .map(|_| true)
-        .unwrap_or(false)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn offer_png(png_bytes: &[u8], deferred: &mut DeferredToast) {
-    if try_web_share_png(png_bytes) {
-        deferred.0 = Some("Share sheet opened".to_string());
-        return;
-    }
-    match wasm_blob_download_png(png_bytes, &default_export_filename()) {
+fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
+    // 「Download」はファイル保存が目的。`navigator.share()` は端末・ブラウザで NotAllowed になりやすく、
+    // かつ Promise の成否をここでは扱えないため同じ経路では使わない（未捕捉 rejection を防ぐ）。
+    match wasm_blob_download_png(png_bytes, filename) {
         Ok(()) => {
             deferred.0 = Some("Image download started".to_string());
         }
@@ -223,8 +234,13 @@ fn wasm_blob_download_png(png_bytes: &[u8], filename: &str) -> Result<(), String
     let link = document.create_element("a").map_err(|e| format!("a: {:?}", e))?;
     link.set_attribute("href", &url).map_err(|e| format!("href: {:?}", e))?;
     link.set_attribute("download", filename).map_err(|e| format!("download: {:?}", e))?;
-    let html = link.dyn_into::<web_sys::HtmlElement>().map_err(|e| format!("html: {:?}", e))?;
+    let body = document.body().ok_or_else(|| "no document body".to_string())?;
+    body.append_child(&link).map_err(|e| format!("append: {:?}", e))?;
+    let html = link
+        .dyn_ref::<web_sys::HtmlElement>()
+        .ok_or_else(|| "a: not HtmlElement".to_string())?;
     html.click();
+    let _ = body.remove_child(&link);
     let _ = web_sys::Url::revoke_object_url(&url);
     Ok(())
 }
@@ -236,18 +252,27 @@ fn finalize_png_export_capture(
     mut cameras: Query<&mut Camera, With<ResultExportCamera>>,
     mut export_busy: ResMut<ResultExportBusy>,
     mut deferred: ResMut<DeferredToast>,
+    mut prepared: ResMut<PreparedResultImage>,
 ) {
     let img = capture.image.clone();
     match png_bytes_from_image(img) {
         Ok(bytes) => {
-            offer_png(&bytes, &mut *deferred);
+            let filename = default_export_filename();
+            prepared.state = PreparedResultImageState::Ready {
+                png: bytes,
+                filename,
+            };
+            deferred.0 = Some("Image ready — tap Download".to_string());
         }
         Err(e) => {
+            prepared.state = PreparedResultImageState::None;
             deferred.0 = Some(e);
         }
     }
 
     export_busy.0 = ExportPhase::Idle;
+
+    prepared.export_phase = ExportPhase::Idle;
 
     if let Ok(mut cam) = cameras.single_mut() {
         cam.is_active = false;
@@ -271,10 +296,12 @@ fn result_export_pipeline(
     mut cameras: Query<(&mut Camera, &mut Projection, &mut Transform), With<ResultExportCamera>>,
     state: Res<FractalState>,
     mut deferred: ResMut<DeferredToast>,
+    mut prepared: ResMut<PreparedResultImage>,
 ) {
     match export_busy.0 {
         ExportPhase::Idle => {
             for _ in msgs.read() {
+                prepared.state = PreparedResultImageState::Preparing;
                 start_export_prep(
                     &mut assets,
                     &mut meshes,
@@ -284,6 +311,7 @@ fn result_export_pipeline(
                     &export_target,
                     &mut export_busy,
                     &mut deferred,
+                    &mut prepared,
                 );
             }
         }
@@ -303,6 +331,8 @@ fn result_export_pipeline(
             let _ = msgs.read();
         }
     }
+
+    prepared.export_phase = export_busy.0;
 }
 
 fn start_export_prep(
@@ -314,19 +344,23 @@ fn start_export_prep(
     export_target: &ExportTargetImage,
     export_busy: &mut ResultExportBusy,
     deferred: &mut DeferredToast,
+    prepared: &mut PreparedResultImage,
 ) {
     if !matches!(export_busy.0, ExportPhase::Idle) {
         deferred.0 = Some("Image export already in progress".into());
+        prepared.state = PreparedResultImageState::None;
         return;
     }
 
     let Ok((mut cam, mut proj, mut tf)) = cameras.single_mut() else {
+        prepared.state = PreparedResultImageState::None;
         return;
     };
 
     let handle = export_target.0.clone();
     let Some(tex) = images.get_mut(&handle) else {
         deferred.0 = Some("Export render target missing".into());
+        prepared.state = PreparedResultImageState::None;
         return;
     };
 
@@ -345,10 +379,12 @@ fn start_export_prep(
 
     let Ok(mesh2d) = fractal_export_q.single() else {
         deferred.0 = Some("Export mesh missing".into());
+        prepared.state = PreparedResultImageState::None;
         return;
     };
     let Some(mesh) = meshes.get_mut(&mesh2d.0) else {
         deferred.0 = Some("Export mesh asset missing".into());
+        prepared.state = PreparedResultImageState::None;
         return;
     };
     rebuild_fractal_export_mesh(mesh, state, half_line_world);

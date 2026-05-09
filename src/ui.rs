@@ -21,7 +21,10 @@ use crate::state::{
     CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, ScreenRect, UiLayout, UndoStack,
 };
-use crate::result_export::RequestResultImageExport;
+use crate::result_export::{
+    PreparedResultImage, PreparedResultImageState, RequestResultImageExport,
+    deliver_prepared_result_png, ExportPhase,
+};
 use crate::toast::{DeferredToast, EguiToast};
 use crate::view::fit_result_camera_if_requested;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
@@ -109,6 +112,7 @@ fn params_panel(
     mut toast: ResMut<EguiToast>,
     mut deferred_toast: ResMut<DeferredToast>,
     mut pending_result_fit: ResMut<PendingResultCameraFit>,
+    mut prepared_png: ResMut<PreparedResultImage>,
     mut edit_cam: Query<
         &mut Camera,
         (
@@ -160,6 +164,8 @@ fn params_panel(
             &mut placement,
             &mut ui_layout,
             &mut toast,
+            &mut deferred_toast,
+            &mut prepared_png,
             &mut pending_result_fit,
         )
     } else {
@@ -174,6 +180,8 @@ fn params_panel(
             &mut placement,
             &mut ui_layout,
             &mut toast,
+            &mut deferred_toast,
+            &mut prepared_png,
             &mut pending_result_fit,
         )
     };
@@ -211,6 +219,8 @@ fn layout_wide(
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
+    deferred_toast: &mut DeferredToast,
+    prepared_png: &mut PreparedResultImage,
     pending_result_fit: &mut PendingResultCameraFit,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
@@ -249,6 +259,8 @@ fn layout_wide(
                         placement,
                         undo_stack,
                         toast,
+                        deferred_toast,
+                        prepared_png,
                         pending_result_fit,
                     );
                 });
@@ -300,6 +312,8 @@ fn layout_narrow(
     placement: &mut PlacementState,
     ui_layout: &mut UiLayout,
     toast: &mut EguiToast,
+    deferred_toast: &mut DeferredToast,
+    prepared_png: &mut PreparedResultImage,
     pending_result_fit: &mut PendingResultCameraFit,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
@@ -394,6 +408,8 @@ fn layout_narrow(
                 placement,
                 undo_stack,
                 toast,
+                deferred_toast,
+                prepared_png,
                 pending_result_fit,
             );
         });
@@ -505,6 +521,8 @@ fn global_controls_bar(
     placement: &mut PlacementState,
     undo_stack: &mut UndoStack,
     toast: &mut EguiToast,
+    deferred_toast: &mut DeferredToast,
+    prepared_png: &mut PreparedResultImage,
     pending_result_fit: &mut PendingResultCameraFit,
 ) {
     ui.add_space(4.0);
@@ -561,7 +579,7 @@ fn global_controls_bar(
             egui::vec2(ui.available_width().max(0.0), row_h),
             egui::Layout::right_to_left(egui::Align::Center),
             |ui| {
-                ui.menu_button("Share", |ui| {
+                let share_menu = ui.menu_button("Share", |ui| {
                     ui.set_min_width(220.0);
                     if ui.button("Copy link").clicked() {
                         match share::encode_state(state) {
@@ -576,11 +594,37 @@ fn global_controls_bar(
                         }
                         ui.close();
                     }
-                    if ui.button("Download image").clicked() {
-                        commands.write_message(RequestResultImageExport);
+                    let export_working = matches!(
+                        prepared_png.export_phase,
+                        ExportPhase::Warm(_) | ExportPhase::Capturing
+                    );
+                    let (dl_label, can_download) = match &prepared_png.state {
+                        PreparedResultImageState::Ready { .. } => ("Download image", true),
+                        PreparedResultImageState::Preparing => ("Preparing image…", false),
+                        PreparedResultImageState::None => {
+                            if export_working {
+                                ("Preparing image…", false)
+                            } else {
+                                ("Download image", false)
+                            }
+                        }
+                    };
+                    if ui
+                        .add_enabled(can_download, egui::Button::new(dl_label))
+                        .clicked()
+                    {
+                        deliver_prepared_result_png(prepared_png, deferred_toast);
                         ui.close();
                     }
                 });
+                let menu_open = share_menu.inner.is_some();
+                if menu_open && !prepared_png.share_menu_was_open {
+                    if matches!(prepared_png.export_phase, ExportPhase::Idle) {
+                        prepared_png.state = PreparedResultImageState::Preparing;
+                        commands.write_message(RequestResultImageExport);
+                    }
+                }
+                prepared_png.share_menu_was_open = menu_open;
             },
         );
     });
