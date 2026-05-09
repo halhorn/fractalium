@@ -209,8 +209,9 @@ fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
 
 #[cfg(target_arch = "wasm32")]
 fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
-    // 「Download」はファイル保存が目的。`navigator.share()` は端末・ブラウザで NotAllowed になりやすく、
-    // かつ Promise の成否をここでは扱えないため同じ経路では使わない（未捕捉 rejection を防ぐ）。
+    if wasm_ua_looks_like_ios_family() && wasm_try_share_png_sheet_with_catch(png_bytes, filename) {
+        return;
+    }
     match wasm_blob_download_png(png_bytes, filename) {
         Ok(()) => {
             deferred.0 = Some("Image download started".to_string());
@@ -219,6 +220,116 @@ fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
             deferred.0 = Some(format!("Could not save image ({e})"));
         }
     }
+}
+
+/// iPhone / iPad / iPod、および iPadOS が Macintosh と偽装するケース。
+#[cfg(target_arch = "wasm32")]
+fn wasm_ua_looks_like_ios_family() -> bool {
+    let Some(win) = web_sys::window() else {
+        return false;
+    };
+    let ua = win
+        .navigator()
+        .user_agent()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    ua.contains("iphone")
+        || ua.contains("ipad")
+        || ua.contains("ipod")
+        || (ua.contains("macintosh") && win.navigator().max_touch_points() > 0)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn js_value_name(val: &wasm_bindgen::JsValue) -> Option<String> {
+    js_sys::Reflect::get(val, &wasm_bindgen::JsValue::from_str("name"))
+        .ok()?
+        .as_string()
+}
+
+/// `navigator.canShare` / `navigator.share` で共有シートを開く。Promise rejection は `.catch` で処理する。
+/// 戻り値 `true` = share を起動した（このあと Blob ダウンロードはしない）。`false` = 未対応なので Blob へ。
+#[cfg(target_arch = "wasm32")]
+fn wasm_try_share_png_sheet_with_catch(png_bytes: &[u8], filename: &str) -> bool {
+    use js_sys::{Array, Function, Object, Reflect, Uint8Array};
+    use wasm_bindgen::{JsCast, JsValue};
+    use wasm_bindgen::closure::Closure;
+
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let nav = window.navigator();
+    let Ok(share_prop) = Reflect::get(&nav, &JsValue::from_str("share")) else {
+        return false;
+    };
+    if share_prop.is_undefined() || share_prop.is_null() {
+        return false;
+    }
+    let Some(share_fn) = share_prop.dyn_ref::<Function>() else {
+        return false;
+    };
+
+    let parts = Array::of1(Uint8Array::from(png_bytes).as_ref());
+    let Ok(file) = web_sys::File::new_with_u8_array_sequence(&parts, filename) else {
+        return false;
+    };
+    let files = Array::of1(file.as_ref());
+
+    let Ok(can_prop) = Reflect::get(&nav, &JsValue::from_str("canShare")) else {
+        return false;
+    };
+    if let Some(can_fn) = can_prop.dyn_ref::<Function>() {
+        let data_probe = Object::new();
+        if Reflect::set(&data_probe, &JsValue::from_str("files"), files.as_ref()).unwrap_or(false)
+            && !Reflect::apply(
+                can_fn,
+                &JsValue::from(window.navigator()),
+                &Array::of1(&data_probe),
+            )
+                .ok()
+                .is_some_and(|v| v.is_truthy())
+        {
+            return false;
+        }
+    }
+
+    let data = Object::new();
+    if !Reflect::set(&data, &JsValue::from_str("files"), files.as_ref()).unwrap_or(false) {
+        return false;
+    }
+    if !Reflect::set(
+        &data,
+        &JsValue::from_str("title"),
+        &JsValue::from_str("Fractalium"),
+    )
+    .unwrap_or(false)
+    {
+        return false;
+    }
+
+    let ret = match Reflect::apply(
+        share_fn,
+        &JsValue::from(window.navigator()),
+        &Array::of1(&data),
+    ) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let Some(promise) = ret.dyn_ref::<js_sys::Promise>() else {
+        return false;
+    };
+
+    let png = png_bytes.to_vec();
+    let filename_owned = filename.to_string();
+    let catch = Closure::wrap(Box::new(move |err: JsValue| {
+        if js_value_name(&err).as_deref() == Some("AbortError") {
+            return;
+        }
+        let _ = wasm_blob_download_png(&png, &filename_owned);
+    }) as Box<dyn FnMut(JsValue)>);
+    let _ = promise.catch(&catch);
+    catch.forget();
+    true
 }
 
 #[cfg(target_arch = "wasm32")]
