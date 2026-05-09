@@ -1,5 +1,7 @@
 //! egui 上に短時間表示する汎用トースト。`EguiToast::show` でキューし、`paint` で描画する。
 
+use std::sync::{Arc, Mutex};
+
 use bevy::prelude::Resource;
 use bevy_egui::egui;
 
@@ -18,9 +20,37 @@ struct ToastLine {
     opaque_hold_secs: f64,
 }
 
-/// `ScreenshotCaptured` のような ECS コンテキストでトーストを出したいとき、ここに積んで egui パスで消費する。
-#[derive(Resource, Default)]
-pub struct DeferredToast(pub Option<String>);
+/// 同期で積むメッセージ。`navigator.share` の Promise などは内部 `pending` に届き、egui 冒頭で `flush_async_to_message` してから表示する。
+#[derive(Resource, Clone)]
+pub struct DeferredToast {
+    pub message: Option<String>,
+    pending: Arc<Mutex<Option<String>>>,
+}
+
+impl Default for DeferredToast {
+    fn default() -> Self {
+        Self {
+            message: None,
+            pending: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+impl DeferredToast {
+    pub fn flush_async_to_message(&mut self) {
+        let Ok(mut g) = self.pending.lock() else {
+            return;
+        };
+        if let Some(msg) = g.take() {
+            self.message = Some(msg);
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn async_toast_sink(&self) -> Arc<Mutex<Option<String>>> {
+        self.pending.clone()
+    }
+}
 
 #[derive(Resource)]
 pub struct EguiToast {

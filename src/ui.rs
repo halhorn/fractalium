@@ -139,7 +139,8 @@ fn params_panel(
     >,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    if let Some(msg) = std::mem::take(&mut deferred_toast.0) {
+    deferred_toast.flush_async_to_message();
+    if let Some(msg) = std::mem::take(&mut deferred_toast.message) {
         toast.show(ctx, msg);
     }
     let Ok(window) = windows.single() else {

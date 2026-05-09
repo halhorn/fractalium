@@ -2,6 +2,9 @@
 
 use std::io::Cursor;
 
+#[cfg(target_arch = "wasm32")]
+use std::sync::{Arc, Mutex};
+
 use bevy::{
     camera::RenderTarget,
     camera::ScalingMode,
@@ -204,10 +207,10 @@ fn offer_png(
     {
         Some(path) => match std::fs::write(&path, png_bytes) {
             Ok(()) => {
-                deferred.0 = Some("Image saved".to_string());
+                deferred.message = Some("Image saved".to_string());
             }
             Err(e) => {
-                deferred.0 = Some(format!("Save failed: {e}"));
+                deferred.message = Some(format!("Save failed: {e}"));
             }
         },
         None => {}
@@ -226,16 +229,21 @@ fn offer_png(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     if wasm_ua_looks_like_ios_family()
-        && wasm_try_share_png_sheet_with_catch(png_bytes, filename, text)
+        && wasm_try_share_png_sheet_with_catch(
+            png_bytes,
+            filename,
+            text,
+            deferred.async_toast_sink(),
+        )
     {
         return;
     }
     match wasm_blob_download_png(png_bytes, filename) {
         Ok(()) => {
-            deferred.0 = Some("Image download started".to_string());
+            deferred.message = Some("Image saved".to_string());
         }
         Err(e) => {
-            deferred.0 = Some(format!("Could not save image ({e})"));
+            deferred.message = Some(format!("Could not save image ({e})"));
         }
     }
 }
@@ -271,6 +279,7 @@ fn wasm_try_share_png_sheet_with_catch(
     png_bytes: &[u8],
     filename: &str,
     share_text: Option<&str>,
+    share_done: Arc<Mutex<Option<String>>>,
 ) -> bool {
     use js_sys::{Array, Function, Object, Reflect, Uint8Array};
     use wasm_bindgen::{JsCast, JsValue};
@@ -358,16 +367,31 @@ fn wasm_try_share_png_sheet_with_catch(
         return false;
     };
 
+    let bridge_ok = share_done.clone();
+    let on_ok = Closure::wrap(Box::new(move |_v: JsValue| {
+        if let Ok(mut g) = bridge_ok.lock() {
+            *g = Some("Image saved".to_string());
+        }
+    }) as Box<dyn FnMut(JsValue)>);
+
+    let bridge_fallback = share_done.clone();
     let png = png_bytes.to_vec();
     let filename_owned = filename.to_string();
-    let catch = Closure::wrap(Box::new(move |err: JsValue| {
+    let on_err = Closure::wrap(Box::new(move |err: JsValue| {
         if js_value_name(&err).as_deref() == Some("AbortError") {
             return;
         }
-        let _ = wasm_blob_download_png(&png, &filename_owned);
+        if wasm_blob_download_png(&png, &filename_owned).is_ok()
+            && let Ok(mut g) = bridge_fallback.lock()
+        {
+            *g = Some("Image saved".to_string());
+        }
     }) as Box<dyn FnMut(JsValue)>);
-    let _ = promise.catch(&catch);
-    catch.forget();
+
+    let after_ok = promise.then(&on_ok);
+    let _ = after_ok.catch(&on_err);
+    on_ok.forget();
+    on_err.forget();
     true
 }
 
@@ -415,7 +439,7 @@ fn finalize_png_export_capture(
         }
         Err(e) => {
             prepared.state = PreparedResultImageState::None;
-            deferred.0 = Some(e);
+            deferred.message = Some(e);
         }
     }
 
@@ -496,7 +520,7 @@ fn start_export_prep(
     prepared: &mut PreparedResultImage,
 ) {
     if !matches!(export_busy.0, ExportPhase::Idle) {
-        deferred.0 = Some("Image export already in progress".into());
+        deferred.message = Some("Image export already in progress".into());
         prepared.state = PreparedResultImageState::None;
         return;
     }
@@ -508,7 +532,7 @@ fn start_export_prep(
 
     let handle = export_target.0.clone();
     let Some(tex) = images.get_mut(&handle) else {
-        deferred.0 = Some("Export render target missing".into());
+        deferred.message = Some("Export render target missing".into());
         prepared.state = PreparedResultImageState::None;
         return;
     };
@@ -527,12 +551,12 @@ fn start_export_prep(
     let half_line_world = EXPORT_LINE_WIDTH_PX * scale_fit / EXPORT_SIZE as f32;
 
     let Ok(mesh2d) = fractal_export_q.single() else {
-        deferred.0 = Some("Export mesh missing".into());
+        deferred.message = Some("Export mesh missing".into());
         prepared.state = PreparedResultImageState::None;
         return;
     };
     let Some(mesh) = meshes.get_mut(&mesh2d.0) else {
-        deferred.0 = Some("Export mesh asset missing".into());
+        deferred.message = Some("Export mesh asset missing".into());
         prepared.state = PreparedResultImageState::None;
         return;
     };
