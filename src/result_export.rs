@@ -80,7 +80,7 @@ struct ExportTargetImage(pub Handle<Image>);
 const EXPORT_SIZE: u32 = 2048;
 #[cfg(not(target_arch = "wasm32"))]
 const EXPORT_SIZE: u32 = 4096;
-const EXPORT_LINE_WIDTH_PX: f32 = 4.0;
+const EXPORT_LINE_WIDTH_PX: f32 = 3.0;
 /// オフスクリーン描画安定化まで待つフレーム数。
 const EXPORT_WARMUP_FRAMES: u8 = 3;
 
