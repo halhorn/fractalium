@@ -512,6 +512,19 @@ fn paint_result_corner_controls(
     });
 }
 
+/// Web Share（iOS 共有シート → X 等）に渡す本文。`Copy link` と同じ状態から URL を組み立てる。
+fn share_sheet_text_for_image_export(state: &FractalState) -> Option<String> {
+    let url = match share::encode_state(state) {
+        Ok(token) => share::share_url_from_token(&token).ok(),
+        Err(_) => None,
+    };
+    let body = match url {
+        Some(u) => format!("\n#fractalium\n{u}"),
+        None => "\n#fractalium".to_string(),
+    };
+    Some(body)
+}
+
 /// undo / redo / snap を並べた操作バー（狭い幅では左側グループが折り返し）。Share は常にバー右端。
 fn global_controls_bar(
     ui: &mut egui::Ui,
@@ -613,7 +626,11 @@ fn global_controls_bar(
                         .add_enabled(can_download, egui::Button::new(dl_label))
                         .clicked()
                     {
-                        deliver_prepared_result_png(prepared_png, deferred_toast);
+                        deliver_prepared_result_png(
+                            prepared_png,
+                            deferred_toast,
+                            share_sheet_text_for_image_export(state),
+                        );
                         ui.close();
                     }
                 });

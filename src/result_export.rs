@@ -57,13 +57,15 @@ impl Default for PreparedResultImageState {
 }
 
 /// Download 押下時に同フレームで呼ぶ（user activation を維持するため）。
+/// `share_sheet_text` は WASM / Web Share 向け（X 等の本文）。ネイティブ保存では未使用。
 pub fn deliver_prepared_result_png(
     prepared: &mut PreparedResultImage,
     deferred: &mut DeferredToast,
+    share_sheet_text: Option<String>,
 ) {
     if let PreparedResultImageState::Ready { png, filename } = std::mem::take(&mut prepared.state)
     {
-        offer_png(&png, &filename, deferred);
+        offer_png(&png, &filename, deferred, share_sheet_text);
     }
 }
 
@@ -190,7 +192,12 @@ fn export_filename_millis() -> u128 {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
+fn offer_png(
+    png_bytes: &[u8],
+    filename: &str,
+    deferred: &mut DeferredToast,
+    _share_sheet_text: Option<String>,
+) {
     match rfd::FileDialog::new()
         .set_file_name(filename)
         .save_file()
@@ -208,8 +215,19 @@ fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn offer_png(png_bytes: &[u8], filename: &str, deferred: &mut DeferredToast) {
-    if wasm_ua_looks_like_ios_family() && wasm_try_share_png_sheet_with_catch(png_bytes, filename) {
+fn offer_png(
+    png_bytes: &[u8],
+    filename: &str,
+    deferred: &mut DeferredToast,
+    share_sheet_text: Option<String>,
+) {
+    let text = share_sheet_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if wasm_ua_looks_like_ios_family()
+        && wasm_try_share_png_sheet_with_catch(png_bytes, filename, text)
+    {
         return;
     }
     match wasm_blob_download_png(png_bytes, filename) {
@@ -249,10 +267,37 @@ fn js_value_name(val: &wasm_bindgen::JsValue) -> Option<String> {
 /// `navigator.canShare` / `navigator.share` で共有シートを開く。Promise rejection は `.catch` で処理する。
 /// 戻り値 `true` = share を起動した（このあと Blob ダウンロードはしない）。`false` = 未対応なので Blob へ。
 #[cfg(target_arch = "wasm32")]
-fn wasm_try_share_png_sheet_with_catch(png_bytes: &[u8], filename: &str) -> bool {
+fn wasm_try_share_png_sheet_with_catch(
+    png_bytes: &[u8],
+    filename: &str,
+    share_text: Option<&str>,
+) -> bool {
     use js_sys::{Array, Function, Object, Reflect, Uint8Array};
     use wasm_bindgen::{JsCast, JsValue};
     use wasm_bindgen::closure::Closure;
+
+    fn fill_share_data(files: &Array, share_text: Option<&str>, data: &Object) -> bool {
+        if !Reflect::set(data, &JsValue::from_str("files"), files.as_ref()).unwrap_or(false) {
+            return false;
+        }
+        if !Reflect::set(
+            data,
+            &JsValue::from_str("title"),
+            &JsValue::from_str("Fractalium"),
+        )
+        .unwrap_or(false)
+        {
+            return false;
+        }
+        if let Some(t) = share_text {
+            if !Reflect::set(data, &JsValue::from_str("text"), &JsValue::from_str(t))
+                .unwrap_or(false)
+            {
+                return false;
+            }
+        }
+        true
+    }
 
     let Some(window) = web_sys::window() else {
         return false;
@@ -279,30 +324,24 @@ fn wasm_try_share_png_sheet_with_catch(png_bytes: &[u8], filename: &str) -> bool
     };
     if let Some(can_fn) = can_prop.dyn_ref::<Function>() {
         let data_probe = Object::new();
-        if Reflect::set(&data_probe, &JsValue::from_str("files"), files.as_ref()).unwrap_or(false)
-            && !Reflect::apply(
-                can_fn,
-                &JsValue::from(window.navigator()),
-                &Array::of1(&data_probe),
-            )
-                .ok()
-                .is_some_and(|v| v.is_truthy())
+        if !Reflect::set(&data_probe, &JsValue::from_str("files"), files.as_ref()).unwrap_or(false)
+        {
+            return false;
+        }
+        if !Reflect::apply(
+            can_fn,
+            &JsValue::from(window.navigator()),
+            &Array::of1(&data_probe),
+        )
+        .ok()
+        .is_some_and(|v| v.is_truthy())
         {
             return false;
         }
     }
 
     let data = Object::new();
-    if !Reflect::set(&data, &JsValue::from_str("files"), files.as_ref()).unwrap_or(false) {
-        return false;
-    }
-    if !Reflect::set(
-        &data,
-        &JsValue::from_str("title"),
-        &JsValue::from_str("Fractalium"),
-    )
-    .unwrap_or(false)
-    {
+    if !fill_share_data(&files, share_text, &data) {
         return false;
     }
 
