@@ -262,7 +262,6 @@ fn finalize_png_export_capture(
                 png: bytes,
                 filename,
             };
-            deferred.0 = Some("Image ready — tap Download".to_string());
         }
         Err(e) => {
             prepared.state = PreparedResultImageState::None;
