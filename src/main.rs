@@ -3,6 +3,7 @@ mod fractal;
 mod fractal_presets;
 mod grid;
 mod placement;
+mod result_export;
 mod seed_shape;
 mod share;
 mod state;
@@ -18,6 +19,7 @@ use edit::EditPlugin;
 use fractal::{FractalPlugin, clamp_fractal_state_depth};
 use fractal_presets::FractalPreset;
 use placement::PlacementPlugin;
+use result_export::ResultExportPlugin;
 use share::SharePlugin;
 use state::{CanvasLayout, FractalState, UiLayout};
 use ui::UiPlugin;
@@ -48,6 +50,11 @@ pub fn placement_layer() -> RenderLayers {
 /// Result キャンバス上のオブジェクトを描画するレンダーレイヤ。
 pub fn result_layer() -> RenderLayers {
     RenderLayers::layer(2)
+}
+
+/// Result と独立したレイヤで、PNG 用の太線フラクタルだけを書き込むカメラ向け。
+pub fn result_export_layer() -> RenderLayers {
+    RenderLayers::layer(6)
 }
 
 fn initial_fractal_state() -> FractalState {
@@ -99,6 +106,7 @@ fn main() {
             PlacementPlugin,
             ViewPlugin,
             SharePlugin,
+            ResultExportPlugin,
             UiPlugin,
         ))
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))

@@ -10,7 +10,7 @@ use bevy::color::Hsla;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 
-use crate::result_layer;
+use crate::{result_export_layer, result_layer};
 use crate::share::PendingShareUrlSync;
 use crate::state::{FRACTAL_DEPTH_HARD_CAP, FractalState, Line, Replica};
 
@@ -127,7 +127,7 @@ pub struct FractalPlugin;
 impl Plugin for FractalPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(PostUpdate, FractalPostUpdateSet::UpdateMesh);
-        app.add_systems(Startup, setup_fractal_mesh)
+        app.add_systems(Startup, (setup_fractal_mesh, setup_fractal_export_mesh))
             // PostUpdate で実行することで、同フレームの Update（drag 確定）・
             // EguiPrimaryContextPass（DragValue 操作）の変更を即座に反映する。
             // depth の予算 clamp はメッシュ構築の直前に行う（UI パスが Update より後のため）。
@@ -179,6 +179,10 @@ fn update_fractal_mesh(
     pending_share.0 = true;
 }
 
+/// PNG 出力専用（太線 TriangleList）。ウィンドウの Result とは別レイヤ。
+#[derive(Component)]
+pub(crate) struct FractalExportMesh;
+
 /// フラクタル描画用 Mesh Entity を識別するマーカー。
 #[derive(Component)]
 struct FractalMesh;
@@ -213,6 +217,23 @@ fn setup_fractal_mesh(
         Mesh2d(meshes.add(mesh)),
         MeshMaterial2d(materials.add(ColorMaterial::default())),
         result_layer(),
+    ));
+}
+
+fn setup_fractal_export_mesh(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    commands.spawn((
+        FractalExportMesh,
+        Mesh2d(meshes.add(mesh)),
+        MeshMaterial2d(materials.add(ColorMaterial::default())),
+        result_export_layer(),
     ));
 }
 
@@ -265,6 +286,98 @@ fn collect_fractal_segments(
             show_all_generations,
         );
     }
+}
+
+fn push_segment_thick_quad(
+    a: Vec2,
+    b: Vec2,
+    half_width: f32,
+    rgba: [f32; 4],
+    positions: &mut Vec<[f32; 3]>,
+    colors: &mut Vec<[f32; 4]>,
+) {
+    if half_width <= 0.0 {
+        return;
+    }
+    let d = b - a;
+    if d.length_squared() < 1e-24 {
+        return;
+    }
+    let n = Vec2::new(-d.y, d.x).normalize() * half_width;
+    let p0 = a - n;
+    let p1 = a + n;
+    let p2 = b + n;
+    let p3 = b - n;
+    for p in [p0, p1, p2, p0, p2, p3] {
+        positions.push([p.x, p.y, 0.0]);
+        colors.push(rgba);
+    }
+}
+
+fn collect_fractal_segments_thick_quads(
+    depth: u32,
+    transform: Replica,
+    lines: &[Line],
+    replicas: &[Replica],
+    positions: &mut Vec<[f32; 3]>,
+    colors: &mut Vec<[f32; 4]>,
+    hue: f32,
+    hue_step: f32,
+    show_all_generations: bool,
+    half_line_world: f32,
+) {
+    let is_leaf = depth <= 1 || replicas.is_empty();
+
+    if is_leaf || show_all_generations {
+        let c = hue_to_linear_rgba(hue);
+        for line in lines {
+            let pa = transform.apply(line.a);
+            let pb = transform.apply(line.b);
+            push_segment_thick_quad(pa, pb, half_line_world, c, positions, colors);
+        }
+    }
+
+    if is_leaf {
+        return;
+    }
+
+    let n = replicas.len() as f32;
+    let child_step = hue_step / n;
+    for (i, replica) in replicas.iter().enumerate() {
+        collect_fractal_segments_thick_quads(
+            depth - 1,
+            transform.compose(*replica),
+            lines,
+            replicas,
+            positions,
+            colors,
+            hue + i as f32 * child_step,
+            child_step,
+            show_all_generations,
+            half_line_world,
+        );
+    }
+}
+
+pub(crate) fn rebuild_fractal_export_mesh(mesh: &mut Mesh, state: &FractalState, half_line_world: f32) {
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut colors: Vec<[f32; 4]> = Vec::new();
+
+    collect_fractal_segments_thick_quads(
+        state.depth,
+        Replica::identity(),
+        &state.base_shape.lines,
+        &state.replicas,
+        &mut positions,
+        &mut colors,
+        0.0,
+        360.0,
+        state.show_all_generations,
+        half_line_world,
+    );
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 }
 
 /// Result キャンバスに描画される線分のワールド座標 AABB。描画ジオメトリが無いときは `None`。

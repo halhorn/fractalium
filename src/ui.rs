@@ -21,7 +21,8 @@ use crate::state::{
     CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, ScreenRect, UiLayout, UndoStack,
 };
-use crate::toast::EguiToast;
+use crate::result_export::RequestResultImageExport;
+use crate::toast::{DeferredToast, EguiToast};
 use crate::view::fit_result_camera_if_requested;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
 
@@ -82,7 +83,8 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<EguiToast>()
+        app.init_resource::<DeferredToast>()
+            .init_resource::<EguiToast>()
             .init_resource::<PendingResultCameraFit>();
 
         app.add_systems(EguiPrimaryContextPass, params_panel);
@@ -96,6 +98,7 @@ impl Plugin for UiPlugin {
 
 fn params_panel(
     mut contexts: EguiContexts,
+    mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut state: ResMut<FractalState>,
     mut draw_state: ResMut<DrawState>,
@@ -104,6 +107,7 @@ fn params_panel(
     mut layout: ResMut<CanvasLayout>,
     mut ui_layout: ResMut<UiLayout>,
     mut toast: ResMut<EguiToast>,
+    mut deferred_toast: ResMut<DeferredToast>,
     mut pending_result_fit: ResMut<PendingResultCameraFit>,
     mut edit_cam: Query<
         &mut Camera,
@@ -131,6 +135,9 @@ fn params_panel(
     >,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
+    if let Some(msg) = std::mem::take(&mut deferred_toast.0) {
+        toast.show(ctx, msg);
+    }
     let Ok(window) = windows.single() else {
         return Ok(());
     };
@@ -144,6 +151,7 @@ fn params_panel(
     let (edit_egui_rect, placement_egui_rect, result_egui_rect) = if is_narrow {
         layout_narrow(
             ctx,
+            &mut commands,
             win_w,
             win_h,
             &mut state,
@@ -157,6 +165,7 @@ fn params_panel(
     } else {
         layout_wide(
             ctx,
+            &mut commands,
             win_w,
             win_h,
             &mut state,
@@ -193,6 +202,7 @@ fn params_panel(
 
 fn layout_wide(
     ctx: &egui::Context,
+    commands: &mut Commands,
     _win_w: f32,
     win_h: f32,
     state: &mut FractalState,
@@ -233,6 +243,7 @@ fn layout_wide(
                 .show(ui, |ui| {
                     global_controls_bar(
                         ui,
+                        commands,
                         state,
                         draw_state,
                         placement,
@@ -280,6 +291,7 @@ fn layout_wide(
 
 fn layout_narrow(
     ctx: &egui::Context,
+    commands: &mut Commands,
     win_w: f32,
     _win_h: f32,
     state: &mut FractalState,
@@ -376,6 +388,7 @@ fn layout_narrow(
         .show(ctx, |ui| {
             global_controls_bar(
                 ui,
+                commands,
                 state,
                 draw_state,
                 placement,
@@ -486,6 +499,7 @@ fn paint_result_corner_controls(
 /// undo / redo / snap を並べた操作バー（狭い幅では左側グループが折り返し）。Share は常にバー右端。
 fn global_controls_bar(
     ui: &mut egui::Ui,
+    commands: &mut Commands,
     state: &mut FractalState,
     draw_state: &mut DrawState,
     placement: &mut PlacementState,
@@ -547,22 +561,26 @@ fn global_controls_bar(
             egui::vec2(ui.available_width().max(0.0), row_h),
             egui::Layout::right_to_left(egui::Align::Center),
             |ui| {
-                if ui
-                    .add(egui::Button::new("Share"))
-                    .on_hover_text("copy sharing link")
-                    .clicked()
-                {
-                    match share::encode_state(state) {
-                        Ok(token) => match share::share_url_from_token(&token) {
-                            Ok(url) => {
-                                ui.ctx().copy_text(url);
-                                toast.show(ui.ctx(), "Link copied");
-                            }
-                            Err(e) => bevy::log::warn!("share URL: {e}"),
-                        },
-                        Err(e) => bevy::log::warn!("share encode: {e}"),
+                ui.menu_button("Share", |ui| {
+                    ui.set_min_width(220.0);
+                    if ui.button("Copy link").clicked() {
+                        match share::encode_state(state) {
+                            Ok(token) => match share::share_url_from_token(&token) {
+                                Ok(url) => {
+                                    ui.ctx().copy_text(url);
+                                    toast.show(ui.ctx(), "Link copied");
+                                }
+                                Err(e) => bevy::log::warn!("share URL: {e}"),
+                            },
+                            Err(e) => bevy::log::warn!("share encode: {e}"),
+                        }
+                        ui.close();
                     }
-                }
+                    if ui.button("Download image").clicked() {
+                        commands.write_message(RequestResultImageExport);
+                        ui.close();
+                    }
+                });
             },
         );
     });

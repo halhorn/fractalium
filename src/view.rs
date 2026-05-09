@@ -1,6 +1,6 @@
 //! 各キャンバスのビュー操作（ズーム・パン）を提供するモジュール。
 
-use bevy::camera::Projection;
+use bevy::camera::{OrthographicProjection, Projection, ScalingMode};
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
@@ -37,8 +37,8 @@ impl ZoomTowardsCursor for ResultCamera {
 }
 
 const ZOOM_SPEED: f32 = 0.02;
-const ZOOM_MIN: f32 = 0.005;
-const ZOOM_MAX: f32 = 8.0;
+pub(crate) const ZOOM_MIN: f32 = 0.005;
+pub(crate) const ZOOM_MAX: f32 = 8.0;
 
 /// `main::normalized_projection` の `AutoMin` 値と一致させる（Result カメラの見える範囲計算用）。
 const RESULT_ORTHO_AUTOMIN: f32 = 2.0;
@@ -662,7 +662,7 @@ fn handle_double_tap_zoom(
 }
 
 /// [`main::normalized_projection`] と同じ AutoMin ルールで、ビューポートあたりの論理投影サイズ（ワールド単位ベース）を返す。
-fn ortho_automin_projection_size(viewport_w: f32, viewport_h: f32) -> (f32, f32) {
+pub(crate) fn ortho_automin_projection_size(viewport_w: f32, viewport_h: f32) -> (f32, f32) {
     let mw = RESULT_ORTHO_AUTOMIN;
     let mh = RESULT_ORTHO_AUTOMIN;
     if viewport_w * mh > mw * viewport_h {
@@ -670,6 +670,41 @@ fn ortho_automin_projection_size(viewport_w: f32, viewport_h: f32) -> (f32, f32)
     } else {
         (mw, viewport_h * mw / viewport_w)
     }
+}
+
+/// Result と同規約のフラクタルフィット投影を正方形画像用に算出する（ウィンドウ用の左上オフセット補正なし）。
+pub(crate) fn result_export_projection(state: &FractalState, export_px: u32) -> (Projection, Transform) {
+    let vw = export_px as f32;
+    let vh = export_px as f32;
+
+    let (mut min_v, mut max_v) = match fractal_world_aabb(state) {
+        Some(b) => b,
+        None => (Vec2::new(-1.0, -1.0), Vec2::new(1.0, 1.0)),
+    };
+    let span_w = (max_v.x - min_v.x).max(1e-6);
+    let span_h = (max_v.y - min_v.y).max(1e-6);
+    let pad = RESULT_FIT_PADDING_RATIO * span_w.max(span_h);
+    min_v -= Vec2::splat(pad);
+    max_v += Vec2::splat(pad);
+    let bw = (max_v.x - min_v.x).max(1e-6);
+    let bh = (max_v.y - min_v.y).max(1e-6);
+
+    let (proj_w, proj_h) = ortho_automin_projection_size(vw, vh);
+    let scale_fit = (bw / proj_w).max(bh / proj_h).clamp(ZOOM_MIN, ZOOM_MAX);
+
+    let cx = (min_v.x + max_v.x) * 0.5;
+    let cy = (min_v.y + max_v.y) * 0.5;
+
+    let proj = Projection::Orthographic(OrthographicProjection {
+        scaling_mode: ScalingMode::AutoMin {
+            min_width: RESULT_ORTHO_AUTOMIN,
+            min_height: RESULT_ORTHO_AUTOMIN,
+        },
+        scale: scale_fit,
+        ..OrthographicProjection::default_2d()
+    });
+
+    (proj, Transform::from_xyz(cx, cy, 0.0))
 }
 
 /// params_panel が Result のビューポートを更新した直後に実行し、保留中なら図形に合わせてズームと中心を付ける。

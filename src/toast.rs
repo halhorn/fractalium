@@ -18,6 +18,10 @@ struct ToastLine {
     opaque_hold_secs: f64,
 }
 
+/// `ScreenshotCaptured` のような ECS コンテキストでトーストを出したいとき、ここに積んで egui パスで消費する。
+#[derive(Resource, Default)]
+pub struct DeferredToast(pub Option<String>);
+
 #[derive(Resource)]
 pub struct EguiToast {
     active: Option<ToastLine>,
