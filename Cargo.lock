@@ -2938,15 +2938,12 @@ dependencies = [
 name = "fractalium"
 version = "0.1.0"
 dependencies = [
- "base64",
  "bevy",
  "bevy_egui",
  "glam",
  "image",
  "js-sys",
  "rfd",
- "serde",
- "serde_json",
  "urlencoding",
  "wasm-bindgen",
  "web-sys",

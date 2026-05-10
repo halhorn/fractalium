@@ -1,5 +1,7 @@
 mod core;
+mod app;
 mod edit;
+mod encoding;
 mod fractal;
 mod fractal_presets;
 mod grid;

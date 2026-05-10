@@ -13,12 +13,15 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::app::{
+    clamp_fractal_state_depth, encode_state, replace_fractal_state_keep_snap,
+    share_sheet_text_for_export,
+};
 use crate::edit::DrawState;
-use crate::fractal::{clamp_fractal_state_depth, max_depth_for_budget, result_replica_color};
+use crate::fractal::{max_depth_for_budget, result_replica_color};
 use crate::fractal_presets::FractalPreset;
 use crate::platform_handles::PlatformHandles;
 use crate::seed_shape::BaseShapePreset;
-use crate::share;
 use crate::state::{
     CanvasLayout, FractalState, PendingResultCameraFit, PlacementDrag, PlacementState,
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, ScreenRect, UiLayout, UndoStack,
@@ -27,7 +30,7 @@ use crate::result_export::{
     PreparedResultImage, PreparedResultImageState, RequestResultImageExport, ResultImageOutlet,
     deliver_prepared_result_png, ExportPhase,
 };
-use crate::share::ShareNavigation;
+use crate::share::{share_url_from_token, ShareNavigation};
 use crate::toast::{DeferredToast, EguiToast};
 use crate::view::fit_result_camera_if_requested;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
@@ -543,19 +546,6 @@ fn paint_result_corner_controls(
     });
 }
 
-/// Web Share（iOS 共有シート → X 等）に渡す本文。`Copy link` と同じ状態から URL を組み立てる。
-fn share_sheet_text_for_image_export(state: &FractalState, share_nav: &ShareNavigation) -> Option<String> {
-    let url = match share::encode_state(state) {
-        Ok(token) => share::share_url_from_token(share_nav, &token).ok(),
-        Err(_) => None,
-    };
-    let body = match url {
-        Some(u) => format!("\n#fractalium\n{u}"),
-        None => "\n#fractalium".to_string(),
-    };
-    Some(body)
-}
-
 /// undo / redo / snap を並べた操作バー（狭い幅では左側グループが折り返し）。Share は常にバー右端。
 fn global_controls_bar(
     ui: &mut egui::Ui,
@@ -607,10 +597,7 @@ fn global_controls_bar(
                 for &preset in FractalPreset::ALL {
                     if ui.button(preset.label()).clicked() {
                         undo_stack.push(state.clone());
-                        let snap = state.snap_grid;
-                        *state = preset.build();
-                        state.snap_grid = snap;
-                        clamp_fractal_state_depth(state);
+                        replace_fractal_state_keep_snap(state, preset.build());
                         *draw_state = DrawState::Idle;
                         placement.selected = None;
                         placement.drag = PlacementDrag::Idle;
@@ -628,8 +615,8 @@ fn global_controls_bar(
                 let share_menu = ui.menu_button("Share", |ui| {
                     ui.set_min_width(220.0);
                     if ui.button("Copy link").clicked() {
-                        match share::encode_state(state) {
-                            Ok(token) => match share::share_url_from_token(share_nav, &token) {
+                        match encode_state(state) {
+                            Ok(token) => match share_url_from_token(share_nav, &token) {
                                 Ok(url) => {
                                     ui.ctx().copy_text(url);
                                     toast.show(ui.ctx(), "Link copied");
@@ -663,7 +650,7 @@ fn global_controls_bar(
                             png_outlet,
                             prepared_png,
                             deferred_toast,
-                            share_sheet_text_for_image_export(state, share_nav),
+                            share_sheet_text_for_export(state, &share_nav.0),
                         );
                         ui.close();
                     }

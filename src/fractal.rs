@@ -14,16 +14,8 @@ use crate::{result_export_layer, result_layer};
 use crate::share::PendingShareUrlSync;
 use crate::state::{FractalState, Line, Replica};
 
+pub use crate::app::clamp_fractal_state_depth;
 pub use crate::core::budget::max_depth_for_budget;
-
-pub fn clamp_fractal_state_depth(state: &mut FractalState) {
-    let cap = max_depth_for_budget(
-        state.base_shape.lines.len(),
-        state.replicas.len(),
-        state.show_all_generations,
-    );
-    state.depth = state.depth.min(cap).max(1);
-}
 
 fn clamp_fractal_depth_to_budget(mut state: ResMut<FractalState>) {
     let cap = max_depth_for_budget(
