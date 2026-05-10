@@ -3,8 +3,9 @@ use std::f32::consts::{FRAC_PI_4, SQRT_2};
 use bevy::prelude::Vec2;
 
 use crate::fractal_presets::common::state;
-use crate::seed_shape::BaseShapePreset;
-use crate::state::{FractalState, Replica};
+use crate::core::seed_preset::BaseShapePreset;
+use crate::core::shape::Replica;
+use crate::state::FractalState;
 
 /// 対称ピタゴラスの木: 正方形の上辺を斜辺とする等辺直角三角形の二脚に、
 /// 辺長 1/√2 の子正方形を外向きに載せる（左 +45°・右 −45°）。`Square` と同じ

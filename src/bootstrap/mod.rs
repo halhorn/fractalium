@@ -6,8 +6,9 @@ use bevy::camera::{OrthographicProjection, Projection, ScalingMode, visibility::
 use bevy::prelude::*;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
+use crate::app::workspace::clamp_fractal_state_depth;
 use crate::edit::EditPlugin;
-use crate::fractal::{FractalPlugin, clamp_fractal_state_depth};
+use crate::fractal::FractalPlugin;
 use crate::fractal_presets::FractalPreset;
 use crate::placement::PlacementPlugin;
 use crate::platform;

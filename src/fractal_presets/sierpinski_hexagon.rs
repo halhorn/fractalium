@@ -1,6 +1,7 @@
 use crate::fractal_presets::common::{hexagon_vertices, state};
-use crate::seed_shape::BaseShapePreset;
-use crate::state::{FractalState, Replica};
+use crate::core::seed_preset::BaseShapePreset;
+use crate::core::shape::Replica;
+use crate::state::FractalState;
 
 pub(super) fn build() -> FractalState {
     let v = hexagon_vertices();

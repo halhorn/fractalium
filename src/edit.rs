@@ -11,10 +11,10 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
-use crate::EditCamera;
-use crate::edit_layer;
+use crate::bootstrap::{edit_layer, EditCamera};
+use crate::core::shape::Line;
 use crate::grid::{draw_grid, snap_to_grid};
-use crate::state::{DoubleTapZoomActive, FractalState, Line, UndoStack};
+use crate::state::{DoubleTapZoomActive, FractalState, UndoStack};
 
 const MIN_LINE_LEN: f32 = 0.01;
 const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);

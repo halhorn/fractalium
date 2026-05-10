@@ -3,8 +3,9 @@ use std::f32::consts::FRAC_PI_3;
 use bevy::prelude::Vec2;
 
 use crate::fractal_presets::common::state;
-use crate::seed_shape::BaseShapePreset;
-use crate::state::{FractalState, Replica};
+use crate::core::seed_preset::BaseShapePreset;
+use crate::core::shape::Replica;
+use crate::state::FractalState;
 
 /// Koch 曲線: [-1,1] の線分に 4 つの相似（回転込み）。
 pub(super) fn build() -> FractalState {

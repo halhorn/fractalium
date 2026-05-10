@@ -10,12 +10,11 @@ use bevy::color::Hsla;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 
+use crate::bootstrap::{result_export_layer, result_layer};
+use crate::core::budget::max_depth_for_budget;
+use crate::core::shape::{Line, Replica};
 use crate::share::PendingShareUrlSync;
-use crate::state::{FractalState, Line, Replica};
-use crate::{result_export_layer, result_layer};
-
-pub use crate::app::clamp_fractal_state_depth;
-pub use crate::core::budget::max_depth_for_budget;
+use crate::state::FractalState;
 
 fn clamp_fractal_depth_to_budget(mut state: ResMut<FractalState>) {
     let cap = max_depth_for_budget(

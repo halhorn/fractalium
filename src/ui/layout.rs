@@ -6,8 +6,9 @@ use bevy_egui::egui;
 use crate::edit::DrawState;
 use crate::result_export::{PreparedResultImage, ResultImageOutlet};
 use crate::share::ShareNavigation;
+use crate::core::shape::Replica;
 use crate::state::{
-    FractalState, PendingResultCameraFit, PlacementState, Replica, UiLayout, UndoStack,
+    FractalState, PendingResultCameraFit, PlacementState, UiLayout, UndoStack,
 };
 use crate::toast::{DeferredToast, EguiToast};
 

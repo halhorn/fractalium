@@ -14,13 +14,13 @@ use bevy::{
     },
 };
 
+use crate::bootstrap::result_export_layer;
+
 use crate::ports::png_export::PngExportSink;
-use crate::{
-    fractal::{FractalExportMesh, rebuild_fractal_export_mesh},
-    state::FractalState,
-    toast::DeferredToast,
-    view::result_export_projection,
-};
+use crate::fractal::{FractalExportMesh, rebuild_fractal_export_mesh};
+use crate::state::FractalState;
+use crate::toast::DeferredToast;
+use crate::view::result_export_projection;
 
 /// メニュー経由で届く PNG をプラットフォームへ渡す。具象 trait は [`crate::ports::png_export::PngExportSink`]（実装は `platform`）。
 #[derive(Resource, Clone)]
@@ -172,7 +172,7 @@ fn setup_result_export_camera(mut commands: Commands, mut images: ResMut<Assets<
         }),
         Transform::default(),
         RenderTarget::Image(image_handle.clone().into()),
-        crate::result_export_layer(),
+        result_export_layer(),
     ));
 }
 

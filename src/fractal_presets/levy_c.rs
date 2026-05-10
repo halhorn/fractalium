@@ -3,8 +3,9 @@ use std::f32::consts::{FRAC_PI_4, SQRT_2};
 use bevy::prelude::Vec2;
 
 use crate::fractal_presets::common::state;
-use crate::seed_shape::BaseShapePreset;
-use crate::state::{FractalState, Replica};
+use crate::core::seed_preset::BaseShapePreset;
+use crate::core::shape::Replica;
+use crate::state::FractalState;
 
 pub(super) fn build() -> FractalState {
     let a0 = FRAC_PI_4;

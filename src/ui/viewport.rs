@@ -5,7 +5,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::{Camera, Query, UVec2, With, Without, default};
 use bevy_egui::egui;
 
-use crate::{EditCamera, PlacementCamera, ResultCamera};
+use crate::bootstrap::{EditCamera, PlacementCamera, ResultCamera};
 
 /// `params_panel` のシステム引数個数制限を避けるため、3 つのカメラ用 [`Query`] を 1 つの [`SystemParam`] に束ねる。
 #[derive(SystemParam)]

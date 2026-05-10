@@ -3,7 +3,7 @@
 use bevy_egui::egui;
 
 use crate::edit::DrawState;
-use crate::seed_shape::BaseShapePreset;
+use crate::core::seed_preset::BaseShapePreset;
 use crate::state::{FractalState, UndoStack};
 
 use super::shell::step_glyph_button;

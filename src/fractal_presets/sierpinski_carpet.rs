@@ -1,8 +1,9 @@
 use bevy::prelude::Vec2;
 
 use crate::fractal_presets::common::state;
-use crate::seed_shape::BaseShapePreset;
-use crate::state::{FractalState, Replica};
+use crate::core::seed_preset::BaseShapePreset;
+use crate::core::shape::Replica;
+use crate::state::FractalState;
 
 pub(super) fn build() -> FractalState {
     let s = 1.0 / 3.0;

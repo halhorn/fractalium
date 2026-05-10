@@ -2,18 +2,19 @@
 
 use bevy::prelude::Vec2;
 
-use crate::seed_shape::BaseShapePreset;
-use crate::state::{FractalState, Line};
+use crate::core::seed_preset::BaseShapePreset;
+use crate::core::shape::{BaseShape, Line, Replica};
+use crate::state::FractalState;
 
 /// `snap_grid` は呼び出し側で引き継ぐ。ここでは `false` で埋めておく。
 pub(super) fn state(
     base_shape: Vec<Line>,
-    replicas: Vec<crate::state::Replica>,
+    replicas: Vec<Replica>,
     depth: u32,
     show_all_generations: bool,
 ) -> FractalState {
     FractalState {
-        base_shape: crate::state::BaseShape { lines: base_shape },
+        base_shape: BaseShape { lines: base_shape },
         replicas,
         depth,
         show_all_generations,

@@ -3,8 +3,8 @@
 use bevy::prelude::Vec2;
 use bevy_egui::egui;
 
-use crate::app::clamp_fractal_state_depth;
-use crate::fractal::max_depth_for_budget;
+use crate::app::workspace::clamp_fractal_state_depth;
+use crate::core::budget::max_depth_for_budget;
 use crate::state::{CanvasLayout, FractalState, ScreenRect};
 
 /// Depth スライダー右隣のドラッグ値・「Show generations」ボタン分を差し引いたスライダー最大幅（論理 px）。

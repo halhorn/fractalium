@@ -3,7 +3,8 @@
 use bevy::prelude::Commands;
 use bevy_egui::egui;
 
-use crate::app::{encode_state, replace_fractal_state_keep_snap, share_sheet_text_for_export};
+use crate::app::fractal_share::{encode_state, share_sheet_text_for_export};
+use crate::app::workspace::replace_fractal_state_keep_snap;
 use crate::edit::DrawState;
 use crate::fractal_presets::FractalPreset;
 use crate::result_export::{

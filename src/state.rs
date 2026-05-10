@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 
-pub use crate::core::{
-    BaseShape, FRACTAL_DEPTH_HARD_CAP, Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica,
-};
+use crate::core::shape::{BaseShape, Replica};
 
 /// フラクタル全体の状態を表す Bevy リソース。
 /// 「基図形 → 複製ルール → 再帰深さ」の 3 要素でフラクタルが一意に決まる。

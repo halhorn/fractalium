@@ -8,10 +8,9 @@ use bevy::prelude::*;
 use super::workspace::clamp_fractal_state_depth;
 use crate::encoding::flat_query_codec::{SubLevel, TopLevel};
 use crate::ports::share_link::ShareNavigationPort;
-use crate::state::{
-    BaseShape, FRACTAL_DEPTH_HARD_CAP, FractalState, Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
-    Replica,
-};
+use crate::core::budget::FRACTAL_DEPTH_HARD_CAP;
+use crate::core::shape::{BaseShape, Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
+use crate::state::FractalState;
 
 /// 共有クエリのフォーマット版。`v=` と不一致なら復号時に拒否する。
 const SHARE_VERSION: u32 = 1;
