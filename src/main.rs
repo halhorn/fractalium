@@ -4,6 +4,9 @@ mod fractal;
 mod fractal_presets;
 mod grid;
 mod placement;
+mod platform;
+mod platform_handles;
+mod ports;
 mod result_export;
 mod seed_shape;
 mod share;
@@ -20,8 +23,9 @@ use edit::EditPlugin;
 use fractal::{FractalPlugin, clamp_fractal_state_depth};
 use fractal_presets::FractalPreset;
 use placement::PlacementPlugin;
-use result_export::ResultExportPlugin;
-use share::SharePlugin;
+use result_export::{ResultExportPlugin, ResultImageOutlet};
+use platform_handles::PlatformHandles;
+use share::{ShareNavigation, SharePlugin};
 use state::{CanvasLayout, FractalState, UiLayout};
 use ui::UiPlugin;
 use view::ViewPlugin;
@@ -111,6 +115,10 @@ fn main() {
             UiPlugin,
         ))
         .insert_resource(ClearColor(Color::srgb(0.08, 0.08, 0.10)))
+        .insert_resource(PlatformHandles {
+            share_navigation: ShareNavigation(platform::share_navigation_arc()),
+            result_png_outlet: ResultImageOutlet(platform::png_export_sink_arc()),
+        })
         .insert_resource(initial_fractal_state())
         .insert_resource(CanvasLayout::default())
         .insert_resource(UiLayout::default())

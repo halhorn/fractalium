@@ -6,10 +6,16 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(target_arch = "wasm32")]
 use crate::edit::DrawState;
+#[cfg(target_arch = "wasm32")]
+use crate::platform_handles::PlatformHandles;
 use crate::state::{
     BaseShape, FractalState, Line, Replica, FRACTAL_DEPTH_HARD_CAP, REPLICA_SCALE_MAX,
     REPLICA_SCALE_MIN,
 };
+
+use std::sync::Arc;
+
+use crate::ports::share_link::ShareNavigationPort;
 
 #[cfg(target_arch = "wasm32")]
 use crate::state::{PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack};
@@ -17,6 +23,11 @@ use crate::state::{PendingResultCameraFit, PlacementDrag, PlacementState, UndoSt
 const SHARE_VERSION: u32 = 1;
 const MAX_LINES: usize = 4096;
 const MAX_REPLICAS: usize = 64;
+
+/// メッシュ確定後の URL 同期などに使う環境側ナビゲーション。具象は `platform`、`main` で注入する。
+#[derive(Resource, Clone)]
+pub struct ShareNavigation(pub Arc<dyn ShareNavigationPort + Send + Sync>);
+
 /// 共有ペイロードで許容する `depth` の上限（再帰スタック安全性。実際の操作上限は `fractal::max_depth_for_budget` 側の予算）。
 pub const MAX_DEPTH: u32 = FRACTAL_DEPTH_HARD_CAP;
 
@@ -350,7 +361,7 @@ pub fn decode_and_apply(token: &str, state: &mut FractalState) -> Result<(), Str
 }
 
 /// `Share` からコピーする完全 URL 用: `location` の search に `from=share` を付ける（無い場合のみ）。
-fn href_with_from_share_query(base_href_without_fragment: &str) -> String {
+pub(crate) fn href_with_from_share_query(base_href_without_fragment: &str) -> String {
     if query_has_from_share(base_href_without_fragment) {
         return base_href_without_fragment.to_string();
     }
@@ -361,7 +372,7 @@ fn href_with_from_share_query(base_href_without_fragment: &str) -> String {
     }
 }
 
-fn query_has_from_share(href: &str) -> bool {
+pub(crate) fn query_has_from_share(href: &str) -> bool {
     let Some((_path, query)) = href.split_once('?') else {
         return false;
     };
@@ -382,7 +393,7 @@ fn query_has_from_share(href: &str) -> bool {
 }
 
 /// メッシュ同期でアドレスバーを書き換えるとき、`search` の `from=share` を落とす（共有経由ページで編集したあと）。
-fn strip_from_share_query_param(base_href_without_fragment: &str) -> String {
+pub(crate) fn strip_from_share_query_param(base_href_without_fragment: &str) -> String {
     let Some((path, query)) = base_href_without_fragment.split_once('?') else {
         return base_href_without_fragment.to_string();
     };
@@ -404,70 +415,8 @@ fn strip_from_share_query_param(base_href_without_fragment: &str) -> String {
     }
 }
 
-pub fn share_url_from_token(query: &str) -> Result<String, String> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let base = location_href_without_hash()?;
-        let base = href_with_from_share_query(&base);
-        Ok(format!("{base}#{query}"))
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        Ok(format!("?from=share#{query}"))
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn location_href_without_hash() -> Result<String, String> {
-    let window = web_sys::window().ok_or("no window")?;
-    let loc = window.location();
-    // `origin + pathname + search` は file:// 等で origin が JS 上 "null" になり
-    // `"null/..."` という無効 URL になることがある。href からフラグメントだけ落とす。
-    let href = loc.href().map_err(|_| "href unavailable")?;
-    let base = match href.split_once('#') {
-        Some((before, _)) => before.to_string(),
-        None => href,
-    };
-    Ok(base)
-}
-
-/// `#` の直後の可読クエリ（`v=…&…`）。`#f=…` やそれ以外は None。
-#[cfg(target_arch = "wasm32")]
-fn parse_location_share_query() -> Option<String> {
-    let window = web_sys::window()?;
-    let hash = window.location().hash().ok()?;
-    if hash.len() <= 1 {
-        return None;
-    }
-    let h = hash.strip_prefix('#')?.trim();
-    if h.starts_with("f=") {
-        return None;
-    }
-    if h.starts_with("v=") {
-        Some(h.to_string())
-    } else {
-        None
-    }
-}
-
-/// アドレスバーのフラグメントを現在の共有形式に合わせる（履歴は `replaceState` で置き換え）。
-#[cfg(target_arch = "wasm32")]
-pub fn set_location_share_query(query: &str) -> Result<(), String> {
-    let window = web_sys::window().ok_or("no window")?;
-    let loc = window.location();
-    let base = location_href_without_hash()?;
-    let base = strip_from_share_query_param(&base);
-    let new_url = format!("{base}#{query}");
-    let hist = window.history().map_err(|_| "history unavailable")?;
-    let hash_fallback = query.to_string();
-    if hist
-        .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_url))
-        .is_err()
-    {
-        loc.set_hash(&hash_fallback)
-            .map_err(|_| "set_hash failed")?;
-    }
-    Ok(())
+pub fn share_url_from_token(nav: &ShareNavigation, query: &str) -> Result<String, String> {
+    nav.0.full_share_page_url_with_readable_body(query)
 }
 
 /// Result メッシュを実際に更新したフレームだけ立て、`flush_share_url_after_fractal_mesh` が URL を同期する。
@@ -477,6 +426,7 @@ pub(crate) struct PendingShareUrlSync(pub bool);
 #[cfg(target_arch = "wasm32")]
 fn flush_share_url_after_fractal_mesh(
     state: Res<FractalState>,
+    platform: Res<PlatformHandles>,
     mut pending: ResMut<PendingShareUrlSync>,
     mut last_token: Local<Option<String>>,
 ) {
@@ -491,11 +441,12 @@ fn flush_share_url_after_fractal_mesh(
     if last_token.as_deref() == Some(query.as_str()) {
         return;
     }
-    if parse_location_share_query().as_deref() == Some(query.as_str()) {
+    let nav = &platform.share_navigation;
+    if nav.0.readable_share_equals_current_fragment(query.as_str()) {
         *last_token = Some(query);
         return;
     }
-    if set_location_share_query(&query).is_ok() {
+    if nav.0.replace_readable_fragment_body(&query).is_ok() {
         *last_token = Some(query);
     }
 }
@@ -519,25 +470,17 @@ impl Plugin for SharePlugin {
 
 #[cfg(target_arch = "wasm32")]
 fn hydrate_from_url(
+    platform: Res<PlatformHandles>,
     mut state: ResMut<FractalState>,
     mut undo: ResMut<UndoStack>,
     mut placement: ResMut<PlacementState>,
     mut draw_state: ResMut<DrawState>,
     mut pending_fit: ResMut<PendingResultCameraFit>,
 ) {
-    let Some(window) = web_sys::window() else {
+    let Some(h_trim_owned) = platform.share_navigation.0.current_fragment_body() else {
         return;
     };
-    let Ok(hash) = window.location().hash() else {
-        return;
-    };
-    if hash.len() <= 1 {
-        return;
-    }
-    let Some(h) = hash.strip_prefix('#') else {
-        return;
-    };
-    let h_trim = h.trim();
+    let h_trim = h_trim_owned.trim();
 
     let applied = if let Some(rest) = h_trim.strip_prefix("f=") {
         let tok = rest.split('&').next().unwrap_or(rest).trim();

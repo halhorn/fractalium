@@ -2,6 +2,8 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::ports::png_export::AsyncMessageSlot;
+
 use bevy::prelude::Resource;
 use bevy_egui::egui;
 
@@ -46,8 +48,8 @@ impl DeferredToast {
         }
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn async_toast_sink(&self) -> Arc<Mutex<Option<String>>> {
+    /// WASM の `navigator.share` など、非同期で完了メッセージを届ける先。ネイティブではポート実装側が無視してよい。
+    pub(crate) fn async_feedback_slot(&self) -> AsyncMessageSlot {
         self.pending.clone()
     }
 }

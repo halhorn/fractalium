@@ -7,6 +7,7 @@
 //!               + Undo/Snap グローバル操作バー + 下部 (Edit | Placement)
 //!               + Parameters（折りたたみ／展開時は Result と干渉しない下部パネル）
 
+use bevy::ecs::system::SystemParam;
 use bevy::camera::Viewport;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -15,6 +16,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::edit::DrawState;
 use crate::fractal::{clamp_fractal_state_depth, max_depth_for_budget, result_replica_color};
 use crate::fractal_presets::FractalPreset;
+use crate::platform_handles::PlatformHandles;
 use crate::seed_shape::BaseShapePreset;
 use crate::share;
 use crate::state::{
@@ -22,12 +24,48 @@ use crate::state::{
     REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, ScreenRect, UiLayout, UndoStack,
 };
 use crate::result_export::{
-    PreparedResultImage, PreparedResultImageState, RequestResultImageExport,
+    PreparedResultImage, PreparedResultImageState, RequestResultImageExport, ResultImageOutlet,
     deliver_prepared_result_png, ExportPhase,
 };
+use crate::share::ShareNavigation;
 use crate::toast::{DeferredToast, EguiToast};
 use crate::view::fit_result_camera_if_requested;
 use crate::{EditCamera, PlacementCamera, ResultCamera};
+
+/// `params_panel` の Bevy システム引数上限を超えないように、3 カメラ `Query` を 1 つの `SystemParam` に束ねる。
+#[derive(SystemParam)]
+struct ViewportCamerasMut<'w, 's> {
+    edit_cam: Query<
+        'w,
+        's,
+        &'static mut Camera,
+        (
+            With<EditCamera>,
+            Without<PlacementCamera>,
+            Without<ResultCamera>,
+        ),
+    >,
+    placement_cam: Query<
+        'w,
+        's,
+        &'static mut Camera,
+        (
+            With<PlacementCamera>,
+            Without<EditCamera>,
+            Without<ResultCamera>,
+        ),
+    >,
+    result_cam: Query<
+        'w,
+        's,
+        &'static mut Camera,
+        (
+            With<ResultCamera>,
+            Without<EditCamera>,
+            Without<PlacementCamera>,
+        ),
+    >,
+}
 
 /// ナローレイアウトの + / - 用。高さはインタラクト高さ、幅はワイド用より詰めてヘッダに収める。
 fn step_glyph_button(ui: &mut egui::Ui, label: &'static str) -> egui::Response {
@@ -113,32 +151,12 @@ fn params_panel(
     mut deferred_toast: ResMut<DeferredToast>,
     mut pending_result_fit: ResMut<PendingResultCameraFit>,
     mut prepared_png: ResMut<PreparedResultImage>,
-    mut edit_cam: Query<
-        &mut Camera,
-        (
-            With<EditCamera>,
-            Without<PlacementCamera>,
-            Without<ResultCamera>,
-        ),
-    >,
-    mut placement_cam: Query<
-        &mut Camera,
-        (
-            With<PlacementCamera>,
-            Without<EditCamera>,
-            Without<ResultCamera>,
-        ),
-    >,
-    mut result_cam: Query<
-        &mut Camera,
-        (
-            With<ResultCamera>,
-            Without<EditCamera>,
-            Without<PlacementCamera>,
-        ),
-    >,
+    platform_handles: Res<PlatformHandles>,
+    mut cameras: ViewportCamerasMut,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
+    let share_nav = &platform_handles.share_navigation;
+    let png_outlet = &platform_handles.result_png_outlet;
     deferred_toast.flush_async_to_message();
     if let Some(msg) = std::mem::take(&mut deferred_toast.message) {
         toast.show(ctx, msg);
@@ -167,6 +185,8 @@ fn params_panel(
             &mut toast,
             &mut deferred_toast,
             &mut prepared_png,
+            share_nav,
+            png_outlet,
             &mut pending_result_fit,
         )
     } else {
@@ -183,19 +203,21 @@ fn params_panel(
             &mut toast,
             &mut deferred_toast,
             &mut prepared_png,
+            share_nav,
+            png_outlet,
             &mut pending_result_fit,
         )
     };
 
     paint_result_corner_controls(ctx, result_egui_rect, &mut *state, &mut layout);
     toast.paint(ctx);
-    if let Ok(mut cam) = edit_cam.single_mut() {
+    if let Ok(mut cam) = cameras.edit_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(edit_egui_rect, scale, win_phys);
     }
-    if let Ok(mut cam) = placement_cam.single_mut() {
+    if let Ok(mut cam) = cameras.placement_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(placement_egui_rect, scale, win_phys);
     }
-    if let Ok(mut cam) = result_cam.single_mut() {
+    if let Ok(mut cam) = cameras.result_cam.single_mut() {
         cam.viewport = egui_rect_to_viewport(result_egui_rect, scale, win_phys);
     }
 
@@ -222,6 +244,8 @@ fn layout_wide(
     toast: &mut EguiToast,
     deferred_toast: &mut DeferredToast,
     prepared_png: &mut PreparedResultImage,
+    share_nav: &ShareNavigation,
+    png_outlet: &ResultImageOutlet,
     pending_result_fit: &mut PendingResultCameraFit,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
@@ -262,6 +286,8 @@ fn layout_wide(
                         toast,
                         deferred_toast,
                         prepared_png,
+                        share_nav,
+                        png_outlet,
                         pending_result_fit,
                     );
                 });
@@ -315,6 +341,8 @@ fn layout_narrow(
     toast: &mut EguiToast,
     deferred_toast: &mut DeferredToast,
     prepared_png: &mut PreparedResultImage,
+    share_nav: &ShareNavigation,
+    png_outlet: &ResultImageOutlet,
     pending_result_fit: &mut PendingResultCameraFit,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Edit/Placement と同じ高さ基準を先に計算
@@ -411,6 +439,8 @@ fn layout_narrow(
                 toast,
                 deferred_toast,
                 prepared_png,
+                share_nav,
+                png_outlet,
                 pending_result_fit,
             );
         });
@@ -514,9 +544,9 @@ fn paint_result_corner_controls(
 }
 
 /// Web Share（iOS 共有シート → X 等）に渡す本文。`Copy link` と同じ状態から URL を組み立てる。
-fn share_sheet_text_for_image_export(state: &FractalState) -> Option<String> {
+fn share_sheet_text_for_image_export(state: &FractalState, share_nav: &ShareNavigation) -> Option<String> {
     let url = match share::encode_state(state) {
-        Ok(token) => share::share_url_from_token(&token).ok(),
+        Ok(token) => share::share_url_from_token(share_nav, &token).ok(),
         Err(_) => None,
     };
     let body = match url {
@@ -537,6 +567,8 @@ fn global_controls_bar(
     toast: &mut EguiToast,
     deferred_toast: &mut DeferredToast,
     prepared_png: &mut PreparedResultImage,
+    share_nav: &ShareNavigation,
+    png_outlet: &ResultImageOutlet,
     pending_result_fit: &mut PendingResultCameraFit,
 ) {
     ui.add_space(4.0);
@@ -597,7 +629,7 @@ fn global_controls_bar(
                     ui.set_min_width(220.0);
                     if ui.button("Copy link").clicked() {
                         match share::encode_state(state) {
-                            Ok(token) => match share::share_url_from_token(&token) {
+                            Ok(token) => match share::share_url_from_token(share_nav, &token) {
                                 Ok(url) => {
                                     ui.ctx().copy_text(url);
                                     toast.show(ui.ctx(), "Link copied");
@@ -628,9 +660,10 @@ fn global_controls_bar(
                         .clicked()
                     {
                         deliver_prepared_result_png(
+                            png_outlet,
                             prepared_png,
                             deferred_toast,
-                            share_sheet_text_for_image_export(state),
+                            share_sheet_text_for_image_export(state, share_nav),
                         );
                         ui.close();
                     }
