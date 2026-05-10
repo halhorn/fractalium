@@ -1,3 +1,4 @@
+mod core;
 mod edit;
 mod fractal;
 mod fractal_presets;

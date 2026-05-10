@@ -8,7 +8,7 @@ pub(super) fn build() -> FractalState {
     let replicas: Vec<Replica> = v
         .into_iter()
         .map(|p| Replica {
-            translation: p * (2.0 / 3.0),
+            position: p * (2.0 / 3.0),
             rotation: 0.0,
             scale: s,
         })

@@ -1,5 +1,9 @@
 use bevy::prelude::*;
 
+pub use crate::core::{
+    BaseShape, Line, Replica, FRACTAL_DEPTH_HARD_CAP, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+};
+
 /// フラクタル全体の状態を表す Bevy リソース。
 /// 「基図形 → 複製ルール → 再帰深さ」の 3 要素でフラクタルが一意に決まる。
 /// 座標は正規化キャンバス座標 [-1, 1] x [-1, 1] を用いる。
@@ -26,95 +30,6 @@ impl Default for FractalState {
             depth: 4,
             show_all_generations: false,
             snap_grid: false,
-        }
-    }
-}
-
-/// 再帰の元になる基図形。現状は線分の集合のみで表現する。
-#[derive(Default, Clone)]
-pub struct BaseShape {
-    pub lines: Vec<Line>,
-}
-
-/// 2 点で表される 2D 線分。
-#[derive(Clone, Copy)]
-pub struct Line {
-    pub a: Vec2,
-    pub b: Vec2,
-}
-
-/// レプリカの一様スケールの下限・上限（UI・ドラッグ・ビューのズームで共通）。
-pub const REPLICA_SCALE_MIN: f32 = 0.05;
-pub const REPLICA_SCALE_MAX: f32 = 2.0;
-
-/// 共有 URL と UI が受け付ける `depth` の絶対上限。`collect_fractal_segments` はこの回数だけ再帰するため、
-/// WASM の狭いコールスタックを想定してネイティブより低めにする。
-#[cfg(target_arch = "wasm32")]
-pub const FRACTAL_DEPTH_HARD_CAP: u32 = 512;
-#[cfg(not(target_arch = "wasm32"))]
-pub const FRACTAL_DEPTH_HARD_CAP: u32 = 2048;
-
-/// 1 つの複製を表す相似変換（平行移動・回転・一様スケール）。
-/// 適用順は scale → rotate → translate。
-#[derive(Clone, Copy)]
-pub struct Replica {
-    /// 平行移動量
-    pub translation: Vec2,
-    /// 回転角（ラジアン）
-    pub rotation: f32,
-    /// 一様スケール（> 0）
-    pub scale: f32,
-}
-
-impl Replica {
-    /// UI から複製が新規追加されたときの初期値。原点・無回転・半分スケール。
-    pub fn default_new() -> Self {
-        Self {
-            translation: Vec2::ZERO,
-            rotation: 0.0,
-            scale: 0.5,
-        }
-    }
-
-    /// 何も変換しない恒等変換。再帰描画の起点として用いる。
-    pub fn identity() -> Self {
-        Self {
-            translation: Vec2::ZERO,
-            rotation: 0.0,
-            scale: 1.0,
-        }
-    }
-
-    /// 基図形空間の点 `p` に scale → rotate → translate を適用する。
-    pub fn apply(&self, p: Vec2) -> Vec2 {
-        let scaled = p * self.scale;
-        let (sin, cos) = self.rotation.sin_cos();
-        Vec2::new(
-            scaled.x * cos - scaled.y * sin,
-            scaled.x * sin + scaled.y * cos,
-        ) + self.translation
-    }
-
-    /// `apply` の逆変換（ワールド座標を基図形空間へ）。
-    pub fn inverse_apply(&self, p: Vec2) -> Vec2 {
-        let q = p - self.translation;
-        let (sin, cos) = self.rotation.sin_cos();
-        let unrotated = Vec2::new(q.x * cos + q.y * sin, -q.x * sin + q.y * cos);
-        unrotated / self.scale
-    }
-
-    /// 2 つの相似変換を合成する。
-    /// 戻り値 `c` は `c.apply(p) == self.apply(other.apply(p))` を満たす。
-    pub fn compose(self, other: Replica) -> Replica {
-        let (sin_s, cos_s) = self.rotation.sin_cos();
-        let rot_t = Vec2::new(
-            other.translation.x * cos_s - other.translation.y * sin_s,
-            other.translation.x * sin_s + other.translation.y * cos_s,
-        );
-        Replica {
-            translation: self.translation + self.scale * rot_t,
-            rotation: self.rotation + other.rotation,
-            scale: self.scale * other.scale,
         }
     }
 }
@@ -184,7 +99,7 @@ pub enum PlacementDrag {
     Idle,
     Move {
         start_cursor: Vec2,
-        start_translation: Vec2,
+        start_position: Vec2,
     },
     Scale {
         pivot: Vec2,

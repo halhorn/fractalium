@@ -755,7 +755,7 @@ fn draw_replica_editor(ui: &mut egui::Ui, i: usize, total: usize, replica: &mut 
     egui::CollapsingHeader::new(title)
         .default_open(true)
         .show(ui, |ui| {
-            translation_row(ui, &mut replica.translation);
+            position_row(ui, &mut replica.position);
             rotation_row(ui, &mut replica.rotation);
             scale_row(ui, &mut replica.scale);
             if ui.button("Delete this replica").clicked() {
@@ -774,17 +774,17 @@ fn replica_title_color(i: usize, total: usize) -> egui::Color32 {
     )
 }
 
-fn translation_row(ui: &mut egui::Ui, translation: &mut Vec2) {
+fn position_row(ui: &mut egui::Ui, position: &mut Vec2) {
     ui.horizontal(|ui| {
         ui.label("TX");
         ui.add(
-            egui::DragValue::new(&mut translation.x)
+            egui::DragValue::new(&mut position.x)
                 .speed(0.01)
                 .range(-2.0..=2.0),
         );
         ui.label("TY");
         ui.add(
-            egui::DragValue::new(&mut translation.y)
+            egui::DragValue::new(&mut position.y)
                 .speed(0.01)
                 .range(-2.0..=2.0),
         );

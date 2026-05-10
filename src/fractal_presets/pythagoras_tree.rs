@@ -14,12 +14,12 @@ pub(super) fn build() -> FractalState {
     let s = SQRT_2 / 2.0;
     let replicas = vec![
         Replica {
-            translation: Vec2::new(-1.0, 2.0),
+            position: Vec2::new(-1.0, 2.0),
             rotation: FRAC_PI_4,
             scale: s,
         },
         Replica {
-            translation: Vec2::new(1.0, 2.0),
+            position: Vec2::new(1.0, 2.0),
             rotation: -FRAC_PI_4,
             scale: s,
         },

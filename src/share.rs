@@ -4,12 +4,11 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-
 #[cfg(target_arch = "wasm32")]
 use crate::edit::DrawState;
 use crate::state::{
-    BaseShape, FRACTAL_DEPTH_HARD_CAP, FractalState, Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
-    Replica,
+    BaseShape, FractalState, Line, Replica, FRACTAL_DEPTH_HARD_CAP, REPLICA_SCALE_MAX,
+    REPLICA_SCALE_MIN,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -33,8 +32,8 @@ struct FractalSnapshot {
 
 #[derive(Serialize, Deserialize)]
 struct ReplicaSnapshot {
-    tx: f32,
-    ty: f32,
+    x: f32,
+    y: f32,
     rot: f32,
     s: f32,
 }
@@ -56,8 +55,8 @@ impl From<&FractalState> for FractalSnapshot {
                 .replicas
                 .iter()
                 .map(|r| ReplicaSnapshot {
-                    tx: r.translation.x,
-                    ty: r.translation.y,
+                    x: r.position.x,
+                    y: r.position.y,
                     rot: r.rotation,
                     s: r.scale,
                 })
@@ -86,7 +85,7 @@ impl FractalSnapshot {
             }
         }
         for r in &self.replicas {
-            if !r.tx.is_finite() || !r.ty.is_finite() || !r.rot.is_finite() || !r.s.is_finite() {
+            if !r.x.is_finite() || !r.y.is_finite() || !r.rot.is_finite() || !r.s.is_finite() {
                 return Err("non-finite replica field".into());
             }
             if r.s <= 0.0 {
@@ -102,7 +101,7 @@ impl FractalSnapshot {
         for r in self.replicas {
             let s = r.s.clamp(REPLICA_SCALE_MIN, REPLICA_SCALE_MAX);
             replicas.push(Replica {
-                translation: Vec2::new(r.tx, r.ty),
+                position: Vec2::new(r.x, r.y),
                 rotation: r.rot,
                 scale: s,
             });
@@ -218,8 +217,8 @@ fn encode_snapshot_readable(snap: &FractalSnapshot) -> Result<String, String> {
     for r in &snap.replicas {
         pairs.push(format!(
             "replica=x:{},y:{},r:{},s:{}",
-            fmt_share_f32_geom(r.tx),
-            fmt_share_f32_geom(r.ty),
+            fmt_share_f32_geom(r.x),
+            fmt_share_f32_geom(r.y),
             fmt_share_f32_geom(r.rot),
             fmt_share_f32_scale(r.s),
         ));
@@ -257,8 +256,8 @@ fn parse_readable_replica(seg: &str) -> Result<ReplicaSnapshot, String> {
             parts.len()
         ));
     }
-    let mut tx = None;
-    let mut ty = None;
+    let mut pos_x = None;
+    let mut pos_y = None;
     let mut rot = None;
     let mut s = None;
     for p in parts {
@@ -267,18 +266,16 @@ fn parse_readable_replica(seg: &str) -> Result<ReplicaSnapshot, String> {
             .ok_or_else(|| format!("replica segment missing ':' {p}"))?;
         let v = v.trim();
         match k.trim() {
-            "x" => tx = Some(v.parse::<f32>().map_err(|_| format!("bad x:{v}"))?),
-            "y" => ty = Some(v.parse::<f32>().map_err(|_| format!("bad y:{v}"))?),
+            "x" => pos_x = Some(v.parse::<f32>().map_err(|_| format!("bad x:{v}"))?),
+            "y" => pos_y = Some(v.parse::<f32>().map_err(|_| format!("bad y:{v}"))?),
             "r" => rot = Some(v.parse::<f32>().map_err(|_| format!("bad r:{v}"))?),
             "s" => s = Some(v.parse::<f32>().map_err(|_| format!("bad s:{v}"))?),
-            _ => {
-                /* 将来の拡張フィールドは無視（前方互換） */
-            }
+            _ => { /* 将来の拡張フィールドは無視（前方互換） */ }
         }
     }
     Ok(ReplicaSnapshot {
-        tx: tx.ok_or("replica missing x")?,
-        ty: ty.ok_or("replica missing y")?,
+        x: pos_x.ok_or("replica missing x")?,
+        y: pos_y.ok_or("replica missing y")?,
         rot: rot.ok_or("replica missing r")?,
         s: s.ok_or("replica missing s")?,
     })
@@ -302,12 +299,7 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
         let val = decoded_pair_value(key, raw_val)?;
 
         match key {
-            "v" => {
-                v = Some(
-                    val.parse::<u32>()
-                        .map_err(|_| format!("bad v:{val}"))?,
-                )
-            }
+            "v" => v = Some(val.parse::<u32>().map_err(|_| format!("bad v:{val}"))?),
             "depth" => depth = Some(val.parse::<u32>().map_err(|_| format!("bad depth:{val}"))?),
             "g" => {
                 show_all = Some(match val.as_str() {
@@ -318,9 +310,7 @@ fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Result<
             }
             "line" => lines.push(parse_readable_line(&val)?),
             "replica" => replicas.push(parse_readable_replica(&val)?),
-            _ => {
-                /* 未知キーは無視 */
-            }
+            _ => { /* 未知キーは無視 */ }
         }
     }
 
@@ -574,8 +564,8 @@ fn hydrate_from_url(
 
 #[cfg(test)]
 mod tests {
-    use base64::Engine;
     use super::*;
+    use base64::Engine;
 
     #[test]
     fn strip_from_share_query_param_removes_only_marker() {
@@ -652,8 +642,8 @@ mod tests {
     #[test]
     fn replica_ignores_unknown_fields() {
         let r = parse_readable_replica("x:1.0,y:2.0,r:3.0,s:4.0,z:0.0").unwrap();
-        assert_eq!(r.tx, 1.0);
-        assert_eq!(r.ty, 2.0);
+        assert_eq!(r.x, 1.0);
+        assert_eq!(r.y, 2.0);
         assert_eq!(r.rot, 3.0);
         assert_eq!(r.s, 4.0);
     }
@@ -689,8 +679,8 @@ mod tests {
             snap_grid: false,
             lines: vec![[-1.0, 0.0, 1.0, 0.0]],
             replicas: vec![ReplicaSnapshot {
-                tx: 0.25,
-                ty: -0.1,
+                x: 0.25,
+                y: -0.1,
                 rot: 0.5,
                 s: 0.75,
             }],

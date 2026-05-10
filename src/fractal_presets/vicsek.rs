@@ -9,27 +9,27 @@ pub(super) fn build() -> FractalState {
     let u = 2.0 / 3.0;
     let replicas = vec![
         Replica {
-            translation: Vec2::new(-u, -u),
+            position: Vec2::new(-u, -u),
             rotation: 0.0,
             scale: s,
         },
         Replica {
-            translation: Vec2::new(u, -u),
+            position: Vec2::new(u, -u),
             rotation: 0.0,
             scale: s,
         },
         Replica {
-            translation: Vec2::new(-u, u),
+            position: Vec2::new(-u, u),
             rotation: 0.0,
             scale: s,
         },
         Replica {
-            translation: Vec2::new(u, u),
+            position: Vec2::new(u, u),
             rotation: 0.0,
             scale: s,
         },
         Replica {
-            translation: Vec2::ZERO,
+            position: Vec2::ZERO,
             rotation: 0.0,
             scale: s,
         },

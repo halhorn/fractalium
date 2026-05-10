@@ -13,16 +13,16 @@ use std::f32::consts::PI;
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 
-use crate::PlacementCamera;
 use crate::fractal::result_replica_color;
 use crate::grid::{draw_fine_grid, snap_to_fine_grid};
 use crate::placement_layer;
 use crate::state::{
-    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState,
-    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, UndoStack,
+    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState, Replica,
+    UndoStack, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
 };
+use crate::PlacementCamera;
 
 // === 定数 ===
 
@@ -349,7 +349,7 @@ fn handle_placement_input(
         }
         if keys.just_pressed(KeyCode::KeyV) {
             if let Some(ref mut cb) = placement.clipboard {
-                cb.translation += PASTE_OFFSET;
+                cb.position += PASTE_OFFSET;
                 let new_replica = *cb;
                 undo_stack.push(state.clone());
                 let new_idx = state.replicas.len();
@@ -479,7 +479,7 @@ fn start_drag(
             // 枠内 → 移動
             PlacementDrag::Move {
                 start_cursor: cursor_pos,
-                start_translation: state.replicas[i].translation,
+                start_position: state.replicas[i].position,
             }
         };
         undo_stack.push(state.clone());
@@ -516,10 +516,10 @@ fn apply_drag(
         PlacementDrag::Idle => {}
         PlacementDrag::Move {
             start_cursor,
-            start_translation,
+            start_position,
         } => {
-            let raw = start_translation + (cursor_pos - start_cursor);
-            replica.translation = if ctrl { snap_to_fine_grid(raw) } else { raw };
+            let raw = start_position + (cursor_pos - start_cursor);
+            replica.position = if ctrl { snap_to_fine_grid(raw) } else { raw };
         }
         PlacementDrag::Scale {
             pivot,
@@ -667,8 +667,8 @@ fn draw_selection_box(
         );
     }
 
-    // + マーク: レプリカの座標原点（translation）に表示
-    let pivot = replica.translation;
+    // + マーク: レプリカの座標原点（position）に表示
+    let pivot = replica.position;
     gizmos.line_2d(
         pivot - Vec2::X * PIVOT_ARM,
         pivot + Vec2::X * PIVOT_ARM,

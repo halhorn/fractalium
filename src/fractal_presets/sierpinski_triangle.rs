@@ -6,7 +6,7 @@ pub(super) fn build() -> FractalState {
     let replicas: Vec<Replica> = triangle_vertices()
         .into_iter()
         .map(|p| Replica {
-            translation: p * 0.5,
+            position: p * 0.5,
             rotation: 0.0,
             scale: 0.5,
         })

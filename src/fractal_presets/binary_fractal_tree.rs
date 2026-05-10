@@ -17,12 +17,12 @@ pub(super) fn build() -> FractalState {
     // x 軸鏡映と IFS の整合: 並進の y を反転し、回転角は符号反転。
     let replicas = vec![
         Replica {
-            translation: flip_y(rotate_neg_90(t0)),
+            position: flip_y(rotate_neg_90(t0)),
             rotation: -theta,
             scale: s,
         },
         Replica {
-            translation: flip_y(rotate_neg_90(t1)),
+            position: flip_y(rotate_neg_90(t1)),
             rotation: theta,
             scale: s,
         },

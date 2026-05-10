@@ -7,11 +7,12 @@
 
 use bevy::prelude::*;
 
+use crate::core::grid_snap as grid_snap_impl;
+
 const GRID_SQUARE_DIV: f32 = 8.0;
 const GRID_TRI_DIV: f32 = 6.0;
 const FINE_SQUARE_DIV: f32 = 16.0;
 const FINE_TRI_DIV: f32 = 12.0;
-/// グリッドの描画・スナップ範囲（[-GRID_RANGE, GRID_RANGE]）。
 const GRID_RANGE: f32 = 3.0;
 
 const GRID_DOT_RADIUS: f32 = 0.012;
@@ -19,55 +20,16 @@ const GRID_HIGHLIGHT_RADIUS: f32 = 0.025;
 const GRID_DOT_COLOR: Color = Color::srgba(0.6, 0.7, 1.0, 0.18);
 const GRID_HIGHLIGHT_COLOR: Color = Color::srgba(0.4, 1.0, 0.6, 0.9);
 
-// === スナップ計算 ===
+// === スナップ（コア実装は `crate::core::grid_snap`） ===
 
 /// 直交格子と等角格子のうち、`pos` により近い格子点を返す（通常解像度）。
 pub fn snap_to_grid(pos: Vec2) -> Vec2 {
-    let sq = nearest_square_point(pos, GRID_SQUARE_DIV);
-    let iso = nearest_iso_point(pos, GRID_TRI_DIV);
-    if iso.distance_squared(pos) <= sq.distance_squared(pos) {
-        iso
-    } else {
-        sq
-    }
+    grid_snap_impl::snap_to_grid(pos)
 }
 
 /// 直交格子と等角格子のうち、`pos` により近い格子点を返す（高解像度）。
 pub fn snap_to_fine_grid(pos: Vec2) -> Vec2 {
-    let sq = nearest_square_point(pos, FINE_SQUARE_DIV);
-    let iso = nearest_iso_point(pos, FINE_TRI_DIV);
-    if iso.distance_squared(pos) <= sq.distance_squared(pos) {
-        iso
-    } else {
-        sq
-    }
-}
-
-fn nearest_square_point(pos: Vec2, div: f32) -> Vec2 {
-    let s = 2.0 / div;
-    Vec2::new((pos.x / s).round() * s, (pos.y / s).round() * s)
-}
-
-fn nearest_iso_point(pos: Vec2, div: f32) -> Vec2 {
-    let h = 2.0 / div;
-    let v = h * (3.0_f32.sqrt() / 2.0);
-    let m_center = ((pos.y + GRID_RANGE) / v).round() as i32;
-    let mut best = Vec2::ZERO;
-    let mut best_dist = f32::MAX;
-    for m in (m_center - 1)..=(m_center + 1) {
-        let row_y = -GRID_RANGE + m as f32 * v;
-        let offset = if m.rem_euclid(2) == 0 { 0.0 } else { h / 2.0 };
-        let n_center = ((pos.x + GRID_RANGE - offset) / h).round() as i32;
-        for n in (n_center - 1)..=(n_center + 1) {
-            let candidate = Vec2::new(-GRID_RANGE + n as f32 * h + offset, row_y);
-            let dist = candidate.distance_squared(pos);
-            if dist < best_dist {
-                best_dist = dist;
-                best = candidate;
-            }
-        }
-    }
-    best
+    grid_snap_impl::snap_to_fine_grid(pos)
 }
 
 // === 格子点描画（GizmoConfigGroup に対してジェネリック） ===

@@ -11,17 +11,17 @@ pub(super) fn build() -> FractalState {
     let half = 0.5_f32;
     let replicas = vec![
         Replica {
-            translation: Vec2::ZERO,
+            position: Vec2::ZERO,
             rotation: 0.0,
             scale: half,
         },
         Replica {
-            translation: Vec2::new(half, 0.0),
+            position: Vec2::new(half, 0.0),
             rotation: FRAC_PI_3,
             scale: half,
         },
         Replica {
-            translation: Vec2::new(half, 0.0),
+            position: Vec2::new(half, 0.0),
             rotation: -FRAC_PI_3,
             scale: half,
         },
