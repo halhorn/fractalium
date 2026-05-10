@@ -13,16 +13,16 @@ use std::f32::consts::PI;
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
-use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::PlacementCamera;
 use crate::fractal::result_replica_color;
 use crate::grid::{draw_fine_grid, snap_to_fine_grid};
 use crate::placement_layer;
 use crate::state::{
-    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState, Replica,
-    UndoStack, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    CanvasLayout, DoubleTapZoomActive, FractalState, Line, PlacementDrag, PlacementState,
+    REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica, UndoStack,
 };
-use crate::PlacementCamera;
 
 // === 定数 ===
 

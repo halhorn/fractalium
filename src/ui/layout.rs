@@ -15,7 +15,7 @@ use super::global_bar::global_controls_bar;
 use super::params::{draw_params_controls, draw_params_panel};
 use super::seed_header::base_shape_header_buttons;
 use super::shell::{
-    app_title_panel_frame, app_title_bar_contents, show_canvas_block, step_glyph_button,
+    app_title_bar_contents, app_title_panel_frame, show_canvas_block, step_glyph_button,
 };
 
 /// 幅 700px 以上: 左ペイン・中央 Result・右 Parameters。戻り値は (edit, placement, result) の論理矩形。

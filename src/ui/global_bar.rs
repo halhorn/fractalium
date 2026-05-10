@@ -7,10 +7,10 @@ use crate::app::{encode_state, replace_fractal_state_keep_snap, share_sheet_text
 use crate::edit::DrawState;
 use crate::fractal_presets::FractalPreset;
 use crate::result_export::{
-    PreparedResultImage, PreparedResultImageState, RequestResultImageExport, ResultImageOutlet,
-    deliver_prepared_result_png, ExportPhase,
+    ExportPhase, PreparedResultImage, PreparedResultImageState, RequestResultImageExport,
+    ResultImageOutlet, deliver_prepared_result_png,
 };
-use crate::share::{share_url_from_token, ShareNavigation};
+use crate::share::{ShareNavigation, share_url_from_token};
 use crate::state::{
     FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack,
 };

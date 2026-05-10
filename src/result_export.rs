@@ -70,20 +70,15 @@ pub fn deliver_prepared_result_png(
     deferred: &mut DeferredToast,
     share_sheet_text: Option<String>,
 ) {
-    if let PreparedResultImageState::Ready { png, filename } = std::mem::take(&mut prepared.state)
-    {
+    if let PreparedResultImageState::Ready { png, filename } = std::mem::take(&mut prepared.state) {
         let trimmed = share_sheet_text
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty());
         let pending = deferred.async_feedback_slot();
-        outlet.0.offer_png(
-            &png,
-            &filename,
-            trimmed,
-            &mut deferred.message,
-            pending,
-        );
+        outlet
+            .0
+            .offer_png(&png, &filename, trimmed, &mut deferred.message, pending);
     }
 }
 
@@ -182,7 +177,9 @@ fn setup_result_export_camera(mut commands: Commands, mut images: ResMut<Assets<
 }
 
 fn png_bytes_from_image(img: Image) -> Result<Vec<u8>, String> {
-    let dyn_img = img.try_into_dynamic().map_err(|e| format!("screenshot decode: {e}"))?;
+    let dyn_img = img
+        .try_into_dynamic()
+        .map_err(|e| format!("screenshot decode: {e}"))?;
     let rgb = dyn_img.to_rgb8();
     let mut buf = Cursor::new(Vec::new());
     rgb.write_to(&mut buf, image::ImageFormat::Png)

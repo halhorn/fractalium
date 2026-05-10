@@ -13,7 +13,8 @@
 #[allow(dead_code)]
 pub trait ShareNavigationPort: Send + Sync {
     /// 「Copy link」用のページ全体 URL（`#` と `fragment_body` を含む）。
-    fn full_share_page_url_with_readable_body(&self, fragment_body: &str) -> Result<String, String>;
+    fn full_share_page_url_with_readable_body(&self, fragment_body: &str)
+    -> Result<String, String>;
 
     /// `#` を `fragment_body` に合わせる（ブラウザでは `history.replaceState`）。
     fn replace_readable_fragment_body(&self, fragment_body: &str) -> Result<(), String>;

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 pub use crate::core::{
-    BaseShape, Line, Replica, FRACTAL_DEPTH_HARD_CAP, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    BaseShape, FRACTAL_DEPTH_HARD_CAP, Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica,
 };
 
 /// フラクタル全体の状態を表す Bevy リソース。

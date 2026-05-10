@@ -22,7 +22,6 @@
 //!   - 数値列： 1.0,-2,3.5
 //!   - キー付き値： x:1.0,y:2.0,r:0,s:1
 
-
 /// エンコード側がサブレベルに書き込む浮動小数トークンで使う有効桁数（桁落ちと文字列長のバランス）。
 const WIRE_F32_SIG_FIGS: i32 = 6;
 /// エンコード側がサブレベルに書き込む [`f32`] トークンで、有効桁丸めのあと絶対値がこれ未満なら `"0.0"` に寄せる（座標もスケールも同一）。
@@ -269,9 +268,7 @@ impl SubLevel {
         let m_i = log10.floor() as i32;
         let frac_digits = ((WIRE_F32_SIG_FIGS - 1) - m_i).max(0).min(20) as usize;
         let rendered = format!("{:.*}", frac_digits, v);
-        Self::ensure_wire_float_has_decimal_point(
-            &Self::trim_trailing_fraction_zeros(&rendered),
-        )
+        Self::ensure_wire_float_has_decimal_point(&Self::trim_trailing_fraction_zeros(&rendered))
     }
 
     /// 有効桁 `sig` に丸めた [`f64`] を返す。`0` または非有限は入力をそのまま返す。
@@ -390,10 +387,7 @@ mod tests {
     #[test]
     fn decode_percent_encoded_value() {
         let top = TopLevel::decode("k=a%26b").unwrap();
-        assert_eq!(
-            top.pairs(),
-            &[("k".into(), SubLevel::new("a&b"))]
-        );
+        assert_eq!(top.pairs(), &[("k".into(), SubLevel::new("a&b"))]);
     }
 
     #[test]
@@ -421,19 +415,14 @@ mod tests {
     #[test]
     fn comma_f32_parse() {
         assert_eq!(
-            SubLevel::new("1.0, -2 , 3.5")
-                .decode_to_f32_vec()
-                .unwrap(),
+            SubLevel::new("1.0, -2 , 3.5").decode_to_f32_vec().unwrap(),
             vec![1.0_f32, -2.0, 3.5]
         );
     }
 
     #[test]
     fn sub_level_kv_roundtrip() {
-        let entries = SubLevelKv(vec![
-            ("x".into(), "1.0".into()),
-            ("y".into(), "2.0".into()),
-        ]);
+        let entries = SubLevelKv(vec![("x".into(), "1.0".into()), ("y".into(), "2.0".into())]);
         let sl = SubLevel::encode_from_kv_f32(&[("x", 1.0), ("y", 2.0)]);
         assert_eq!(sl.decode_to_kv_pairs().unwrap(), entries);
     }
@@ -462,7 +451,10 @@ mod tests {
 
     #[test]
     fn wire_f32_six_sig_figs_trims_trailing_zeros() {
-        assert_eq!(SubLevel::encode_from_f32_vec(&[3.10000002f32]).as_str(), "3.1");
+        assert_eq!(
+            SubLevel::encode_from_f32_vec(&[3.10000002f32]).as_str(),
+            "3.1"
+        );
     }
 
     #[test]
@@ -476,7 +468,10 @@ mod tests {
 
     #[test]
     fn wire_f32_tiny_noise_clamps_to_zero() {
-        assert_eq!(SubLevel::encode_from_f32_vec(&[-0.000000044f32]).as_str(), "0.0");
+        assert_eq!(
+            SubLevel::encode_from_f32_vec(&[-0.000000044f32]).as_str(),
+            "0.0"
+        );
     }
 
     #[test]

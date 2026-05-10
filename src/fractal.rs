@@ -10,9 +10,9 @@ use bevy::color::Hsla;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 
-use crate::{result_export_layer, result_layer};
 use crate::share::PendingShareUrlSync;
 use crate::state::{FractalState, Line, Replica};
+use crate::{result_export_layer, result_layer};
 
 pub use crate::app::clamp_fractal_state_depth;
 pub use crate::core::budget::max_depth_for_budget;
@@ -272,7 +272,11 @@ fn collect_fractal_segments_thick_quads(
     }
 }
 
-pub(crate) fn rebuild_fractal_export_mesh(mesh: &mut Mesh, state: &FractalState, half_line_world: f32) {
+pub(crate) fn rebuild_fractal_export_mesh(
+    mesh: &mut Mesh,
+    state: &FractalState,
+    half_line_world: f32,
+) {
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut colors: Vec<[f32; 4]> = Vec::new();
 

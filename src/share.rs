@@ -16,13 +16,15 @@ use crate::platform_handles::PlatformHandles;
 use crate::ports::share_link::ShareNavigationPort;
 
 #[cfg(target_arch = "wasm32")]
-use crate::state::{FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack};
+use crate::state::{
+    FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack,
+};
 
+#[allow(unused_imports)]
+pub use crate::app::MAX_DEPTH;
 /// 旧パス互換。本体実装は [`crate::app::fractal_share`]。
 #[cfg_attr(not(target_arch = "wasm32"), allow(unused_imports))]
 pub use crate::app::{decode_readable_share_query, encode_state};
-#[allow(unused_imports)]
-pub use crate::app::MAX_DEPTH;
 
 /// Copy link 用に、`location` の search に `from=share` を 1 回だけ足す（既にあるときは何もしない）。
 ///

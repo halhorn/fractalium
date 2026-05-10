@@ -34,7 +34,11 @@ pub(crate) fn draw_params_panel(
 }
 
 /// パネル本体の統計ラベルとレプリカセクション。
-pub(crate) fn draw_params_controls(ui: &mut egui::Ui, state: &mut FractalState, undo_stack: &mut UndoStack) {
+pub(crate) fn draw_params_controls(
+    ui: &mut egui::Ui,
+    state: &mut FractalState,
+    undo_stack: &mut UndoStack,
+) {
     ui.label(format!("Lines: {}", state.base_shape.lines.len()));
     ui.add_space(6.0);
 

@@ -7,10 +7,10 @@
 //!               + Undo/Snap グローバル操作バー + 下部 (Edit | Placement)
 //!               + Parameters（折りたたみ／展開時は Result と干渉しない下部パネル）
 
+mod depth_controller;
 mod global_bar;
 mod layout;
 mod params;
-mod depth_controller;
 mod seed_header;
 mod shell;
 mod viewport;
@@ -28,8 +28,8 @@ use crate::state::{
 use crate::toast::{DeferredToast, EguiToast};
 use crate::view::fit_result_camera_if_requested;
 
-use layout::{layout_narrow, layout_wide};
 use depth_controller::paint_depth_controls;
+use layout::{layout_narrow, layout_wide};
 use viewport::{ViewportCamerasMut, egui_rect_to_viewport};
 
 /// egui のメインコンテキストPassでパネルとビューポートを更新する [`Plugin`]。

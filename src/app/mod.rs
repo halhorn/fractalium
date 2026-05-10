@@ -9,6 +9,6 @@ mod fractal_share;
 mod workspace;
 
 pub use fractal_share::{
-    decode_readable_share_query, encode_state, share_sheet_text_for_export, MAX_DEPTH,
+    MAX_DEPTH, decode_readable_share_query, encode_state, share_sheet_text_for_export,
 };
 pub use workspace::{clamp_fractal_state_depth, replace_fractal_state_keep_snap};

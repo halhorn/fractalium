@@ -18,9 +18,9 @@ pub use budget::FRACTAL_DEPTH_HARD_CAP;
 pub use shape::BaseShape;
 /// 正規化座標上の開線分。端点は `a` から `b`。
 pub use shape::Line;
-/// IFS の各枝に対応する相似変換（一様スケール・回転のあとの位置オフセットを含む）。
-pub use shape::Replica;
 /// レプリカの一様スケールの上限。編集・共有形式の検証・UI の上限を揃える。
 pub use shape::REPLICA_SCALE_MAX;
 /// レプリカの一様スケールの下限。編集・共有形式の検証・UI の下限を揃える。
 pub use shape::REPLICA_SCALE_MIN;
+/// IFS の各枝に対応する相似変換（一様スケール・回転のあとの位置オフセットを含む）。
+pub use shape::Replica;

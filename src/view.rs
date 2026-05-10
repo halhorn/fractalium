@@ -673,7 +673,10 @@ pub(crate) fn ortho_automin_projection_size(viewport_w: f32, viewport_h: f32) ->
 }
 
 /// Result と同規約のフラクタルフィット投影を正方形画像用に算出する（ウィンドウ用の左上オフセット補正なし）。
-pub(crate) fn result_export_projection(state: &FractalState, export_px: u32) -> (Projection, Transform) {
+pub(crate) fn result_export_projection(
+    state: &FractalState,
+    export_px: u32,
+) -> (Projection, Transform) {
     let vw = export_px as f32;
     let vh = export_px as f32;
 

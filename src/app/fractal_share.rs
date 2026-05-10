@@ -9,8 +9,8 @@ use super::workspace::clamp_fractal_state_depth;
 use crate::encoding::flat_query_codec::{SubLevel, TopLevel};
 use crate::ports::share_link::ShareNavigationPort;
 use crate::state::{
-    BaseShape, FractalState, Line, Replica, FRACTAL_DEPTH_HARD_CAP, REPLICA_SCALE_MAX,
-    REPLICA_SCALE_MIN,
+    BaseShape, FRACTAL_DEPTH_HARD_CAP, FractalState, Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN,
+    Replica,
 };
 
 /// 共有クエリのフォーマット版。`v=` と不一致なら復号時に拒否する。
@@ -155,7 +155,6 @@ impl FractalSnapshot {
     }
 }
 
-
 /// [`TopLevel::decode`](crate::encoding::flat_query_codec::TopLevel::decode) でクエリ本文を復号し、`v` / `depth` / … を [`FractalState`] に反映する（深度はワークスペースルールでクランプ）。
 ///
 /// # 引数
@@ -243,7 +242,10 @@ fn encode_snapshot_readable(snap: &FractalSnapshot) -> Result<String, String> {
     let mut pairs: Vec<(String, SubLevel)> = Vec::new();
     pairs.push(("v".into(), SubLevel::new(snap.v.to_string())));
     pairs.push(("depth".into(), SubLevel::new(snap.depth.to_string())));
-    pairs.push(("g".into(), SubLevel::new(format!("{}", snap.show_all_generations as u8))));
+    pairs.push((
+        "g".into(),
+        SubLevel::new(format!("{}", snap.show_all_generations as u8)),
+    ));
     for [ax, ay, bx, by] in &snap.lines {
         pairs.push((
             "line".into(),
@@ -253,12 +255,7 @@ fn encode_snapshot_readable(snap: &FractalSnapshot) -> Result<String, String> {
     for r in &snap.replicas {
         pairs.push((
             "replica".into(),
-            SubLevel::encode_from_kv_f32(&[
-                ("x", r.x),
-                ("y", r.y),
-                ("r", r.rot),
-                ("s", r.s),
-            ]),
+            SubLevel::encode_from_kv_f32(&[("x", r.x), ("y", r.y), ("r", r.rot), ("s", r.s)]),
         ));
     }
     Ok(TopLevel(pairs).encode())
@@ -339,10 +336,7 @@ mod tests {
 
     #[test]
     fn replica_ignores_unknown_fields() {
-        let r = parse_readable_replica(&SubLevel::new(
-            "x:1.0,y:2.0,r:3.0,s:4.0,z:0.0",
-        ))
-        .unwrap();
+        let r = parse_readable_replica(&SubLevel::new("x:1.0,y:2.0,r:3.0,s:4.0,z:0.0")).unwrap();
         assert_eq!(r.x, 1.0);
         assert_eq!(r.y, 2.0);
         assert_eq!(r.rot, 3.0);

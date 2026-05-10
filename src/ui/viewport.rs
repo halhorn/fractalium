@@ -50,7 +50,11 @@ pub(crate) struct ViewportCamerasMut<'w, 's> {
 ///
 /// `scale` はウィンドウの `scale_factor`、`win_phys` は `physical_width` × `physical_height`。
 /// 矩形が無効なら `None`。
-pub(crate) fn egui_rect_to_viewport(rect: egui::Rect, scale: f32, win_phys: UVec2) -> Option<Viewport> {
+pub(crate) fn egui_rect_to_viewport(
+    rect: egui::Rect,
+    scale: f32,
+    win_phys: UVec2,
+) -> Option<Viewport> {
     let x = ((rect.min.x * scale).round() as i32).max(0) as u32;
     let y = ((rect.min.y * scale).round() as i32).max(0) as u32;
     let w = ((rect.width() * scale).round() as i32).max(0) as u32;

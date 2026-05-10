@@ -202,15 +202,24 @@ fn blob_download_anchor_click(png_bytes: &[u8], filename: &str) -> Result<(), St
 
     let arr = js_sys::Uint8Array::from(png_bytes);
     let parts = js_sys::Array::of1(arr.as_ref());
-    let blob = web_sys::Blob::new_with_u8_array_sequence(&parts).map_err(|e| format!("blob: {:?}", e))?;
-    let url = web_sys::Url::create_object_url_with_blob(&blob).map_err(|e| format!("url: {:?}", e))?;
+    let blob =
+        web_sys::Blob::new_with_u8_array_sequence(&parts).map_err(|e| format!("blob: {:?}", e))?;
+    let url =
+        web_sys::Url::create_object_url_with_blob(&blob).map_err(|e| format!("url: {:?}", e))?;
     let window = web_sys::window().ok_or_else(|| "no window".to_string())?;
     let document = window.document().ok_or_else(|| "no document".to_string())?;
-    let link = document.create_element("a").map_err(|e| format!("a: {:?}", e))?;
-    link.set_attribute("href", &url).map_err(|e| format!("href: {:?}", e))?;
-    link.set_attribute("download", filename).map_err(|e| format!("download: {:?}", e))?;
-    let body = document.body().ok_or_else(|| "no document body".to_string())?;
-    body.append_child(&link).map_err(|e| format!("append: {:?}", e))?;
+    let link = document
+        .create_element("a")
+        .map_err(|e| format!("a: {:?}", e))?;
+    link.set_attribute("href", &url)
+        .map_err(|e| format!("href: {:?}", e))?;
+    link.set_attribute("download", filename)
+        .map_err(|e| format!("download: {:?}", e))?;
+    let body = document
+        .body()
+        .ok_or_else(|| "no document body".to_string())?;
+    body.append_child(&link)
+        .map_err(|e| format!("append: {:?}", e))?;
     let html = link
         .dyn_ref::<web_sys::HtmlElement>()
         .ok_or_else(|| "a: not HtmlElement".to_string())?;
