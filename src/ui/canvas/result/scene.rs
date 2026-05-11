@@ -160,19 +160,13 @@ fn collect_fractal_segments(
     colors: &mut Vec<[f32; 4]>,
     show_all_generations: bool,
 ) {
-    for_each_fractal_line_segment(
-        depth,
-        lines,
-        replicas,
-        show_all_generations,
-        |seg| {
-            let c = hue_to_linear_rgba(seg.hue_degrees);
-            positions.push([seg.a.x, seg.a.y, 0.0]);
-            positions.push([seg.b.x, seg.b.y, 0.0]);
-            colors.push(c);
-            colors.push(c);
-        },
-    );
+    for_each_fractal_line_segment(depth, lines, replicas, show_all_generations, |seg| {
+        let c = hue_to_linear_rgba(seg.hue_degrees);
+        positions.push([seg.a.x, seg.a.y, 0.0]);
+        positions.push([seg.b.x, seg.b.y, 0.0]);
+        colors.push(c);
+        colors.push(c);
+    });
 }
 
 fn push_segment_thick_quad(

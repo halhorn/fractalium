@@ -69,7 +69,11 @@ impl PresetThumbnailCache {
             .get_mut(&preset)
             .expect("preset thumbnails map seeded with ALL");
         if slot.is_none() {
-            *slot = bytes_to_texture(ctx, &texture_key_for_preset(preset), png_bytes_for_preset(preset));
+            *slot = bytes_to_texture(
+                ctx,
+                &texture_key_for_preset(preset),
+                png_bytes_for_preset(preset),
+            );
         }
         slot.as_ref()
     }
@@ -111,10 +115,6 @@ fn png_bytes_for_preset(preset: FractalPreset) -> &'static [u8] {
             env!("CARGO_MANIFEST_DIR"),
             "/assets/fractalium/preset_thumbnails/levy_c.png"
         )),
-        FractalPreset::SierpinskiCarpet => include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/fractalium/preset_thumbnails/sierpinski_carpet.png"
-        )),
         FractalPreset::PythagorasTree => include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/assets/fractalium/preset_thumbnails/pythagoras_tree.png"
@@ -127,13 +127,29 @@ fn png_bytes_for_preset(preset: FractalPreset) -> &'static [u8] {
             env!("CARGO_MANIFEST_DIR"),
             "/assets/fractalium/preset_thumbnails/sierpinski_star.png"
         )),
-        FractalPreset::BinaryFractalTree => include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/fractalium/preset_thumbnails/binary_fractal_tree.png"
-        )),
         FractalPreset::Terdragon => include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/assets/fractalium/preset_thumbnails/terdragon.png"
+        )),
+        FractalPreset::HalCycloneTriangle => include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fractalium/preset_thumbnails/hal_cyclone_triangle.png"
+        )),
+        FractalPreset::HalWing => include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fractalium/preset_thumbnails/hal_wing.png"
+        )),
+        FractalPreset::HalTree => include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fractalium/preset_thumbnails/hal_tree.png"
+        )),
+        FractalPreset::HalVStar => include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fractalium/preset_thumbnails/hal_v_star.png"
+        )),
+        FractalPreset::HalMosaicWindow => include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fractalium/preset_thumbnails/hal_mosaic_window.png"
         )),
     }
 }

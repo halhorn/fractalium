@@ -1,13 +1,16 @@
 //! 基図形・レプリカ・深さをまとめて切り替えるフラクタル全体プリセット。
 //! IFS は各レプリカ R に対し `transform.compose(R)` で深さ方向に合成される。
 
-mod binary_fractal_tree;
 mod common;
+mod hal_cyclone_triangle;
+mod hal_mosaic_window;
+mod hal_tree;
+mod hal_v_star;
+mod hal_wing;
 mod heighway_dragon;
 mod koch_curve;
 mod levy_c;
 mod pythagoras_tree;
-mod sierpinski_carpet;
 mod sierpinski_hexagon;
 mod sierpinski_star;
 mod sierpinski_triangle;
@@ -21,12 +24,15 @@ pub enum FractalPreset {
     Vicsek,
     HeighwayDragon,
     LevyCCurve,
-    SierpinskiCarpet,
     PythagorasTree,
     SierpinskiHexagon,
     SierpinskiStar,
-    BinaryFractalTree,
     Terdragon,
+    HalCycloneTriangle,
+    HalWing,
+    HalTree,
+    HalVStar,
+    HalMosaicWindow,
 }
 
 impl FractalPreset {
@@ -36,12 +42,15 @@ impl FractalPreset {
         FractalPreset::Vicsek,
         FractalPreset::HeighwayDragon,
         FractalPreset::LevyCCurve,
-        FractalPreset::SierpinskiCarpet,
         FractalPreset::PythagorasTree,
         FractalPreset::SierpinskiHexagon,
         FractalPreset::SierpinskiStar,
-        FractalPreset::BinaryFractalTree,
         FractalPreset::Terdragon,
+        FractalPreset::HalCycloneTriangle,
+        FractalPreset::HalWing,
+        FractalPreset::HalTree,
+        FractalPreset::HalVStar,
+        FractalPreset::HalMosaicWindow,
     ];
 
     pub fn label(self) -> &'static str {
@@ -51,12 +60,15 @@ impl FractalPreset {
             FractalPreset::Vicsek => "Vicsek (fractal cross)",
             FractalPreset::HeighwayDragon => "Dragon curve",
             FractalPreset::LevyCCurve => "Lévy C curve",
-            FractalPreset::SierpinskiCarpet => "Sierpiński carpet",
             FractalPreset::PythagorasTree => "Pythagoras tree",
             FractalPreset::SierpinskiHexagon => "Sierpiński hexagon",
             FractalPreset::SierpinskiStar => "Sierpiński pentagram",
-            FractalPreset::BinaryFractalTree => "Binary fractal tree",
             FractalPreset::Terdragon => "Terdragon curve",
+            FractalPreset::HalCycloneTriangle => "hal Cyclone Triangle",
+            FractalPreset::HalWing => "hal Wing",
+            FractalPreset::HalTree => "hal Tree",
+            FractalPreset::HalVStar => "hal V Star",
+            FractalPreset::HalMosaicWindow => "hal Mosaic Window",
         }
     }
 
@@ -68,12 +80,15 @@ impl FractalPreset {
             FractalPreset::Vicsek => vicsek::build(),
             FractalPreset::HeighwayDragon => heighway_dragon::build(),
             FractalPreset::LevyCCurve => levy_c::build(),
-            FractalPreset::SierpinskiCarpet => sierpinski_carpet::build(),
             FractalPreset::PythagorasTree => pythagoras_tree::build(),
             FractalPreset::SierpinskiHexagon => sierpinski_hexagon::build(),
             FractalPreset::SierpinskiStar => sierpinski_star::build(),
-            FractalPreset::BinaryFractalTree => binary_fractal_tree::build(),
             FractalPreset::Terdragon => terdragon::build(),
+            FractalPreset::HalCycloneTriangle => hal_cyclone_triangle::build(),
+            FractalPreset::HalWing => hal_wing::build(),
+            FractalPreset::HalTree => hal_tree::build(),
+            FractalPreset::HalVStar => hal_v_star::build(),
+            FractalPreset::HalMosaicWindow => hal_mosaic_window::build(),
         }
     }
 
@@ -97,6 +112,33 @@ impl FractalPreset {
                     .collect();
                 label_key == key
             }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::app::session_rules::clamp_fractal_state_depth;
+
+    use super::FractalPreset;
+
+    /// hal 系プリセットの `depth` が予算クランプ後も維持されること。
+    #[test]
+    fn hal_presets_depth_survives_budget_clamp() {
+        for (preset, expected_depth) in [
+            (FractalPreset::HalCycloneTriangle, 15u32),
+            (FractalPreset::HalWing, 7),
+            (FractalPreset::HalTree, 10),
+            (FractalPreset::HalVStar, 10),
+            (FractalPreset::HalMosaicWindow, 12),
+        ] {
+            let mut state = preset.build();
+            assert_eq!(state.depth, expected_depth);
+            clamp_fractal_state_depth(&mut state);
+            assert_eq!(
+                state.depth, expected_depth,
+                "{preset:?}: budget clamp must not lower preset depth on this target"
+            );
         }
     }
 }

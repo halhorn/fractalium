@@ -10,7 +10,7 @@ pub(super) const PRESET_PANEL_SIDE_MARGIN: f32 = 32.0;
 /// Close 行フレームとスクロール内コンテンツの上下インナー。**Close 直下**の空きもこれと同じにする。
 pub(super) const PRESET_PANEL_VERTICAL_INNER_MARGIN: f32 = 8.0;
 
-use bevy::prelude::{Resource, ResMut};
+use bevy::prelude::{ResMut, Resource};
 
 use crate::app::session::{PlacementDrag, PlacementState};
 use crate::ui::canvas::seed::DrawState;

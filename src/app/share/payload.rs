@@ -44,11 +44,7 @@ fn validate_fractal_state_readable(state: &FractalState) -> Result<(), String> {
     }
     for l in &state.base_shape.lines {
         let Line { a, b } = *l;
-        if !(a.x.is_finite()
-            && a.y.is_finite()
-            && b.x.is_finite()
-            && b.y.is_finite())
-        {
+        if !(a.x.is_finite() && a.y.is_finite() && b.x.is_finite() && b.y.is_finite()) {
             return Err("non-finite line coordinate".into());
         }
     }

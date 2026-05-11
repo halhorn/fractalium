@@ -37,12 +37,15 @@ https://github.com/user-attachments/assets/72efb82c-006f-4da5-bf7b-f2ffbdc30293
 | Vicsek (fractal cross) | 十字型に小さいコピーが並ぶ、自己相似な集合。 |
 | Dragon curve | 折り紙の折り目の極限として知られる角ばった平面曲線。 |
 | Lévy C curve | 直角二等辺三角形の斜辺を反復してできる曲線。 |
-| Sierpiński carpet | 正方形に規則的に穴を開けていく、シャギーラグ状のフラクタル。 |
 | Pythagoras tree | 直角三角形と正方形からなる、木の形の有名な図。 |
 | Sierpiński hexagon | 正六角形に沿った穴あきパターン（六角版のシェルピンスキー系）。 |
 | Sierpiński pentagram | 五角形／星形に関係した自己相似パターン。 |
-| Binary fractal tree | 幹から二分岐する樹木状のフラクタル。 |
 | Terdragon curve | 3 本のドラゴン曲線が絡み合う形の、自己相似な曲線。 |
+| hal Cyclone Triangle | 垂直な基線から 2 系の複製で回転の強い構造になる作者作の IFS。 |
+| hal Wing | 水平な基線に 5 複製が置かれたひし形〜翼に近い作者作のパターン。 |
+| hal Tree | 縦長の種から広がる樹枝状の作者作の IFS。 |
+| hal V Star | 短い縦線と 3 複製でつくられる星・V に近い作者作の図形。 |
+| hal Mosaic Window | hal V Star に近い基線から、異なる複製オフセットで窓・モザイク調になる作者作。 |
 
 ### Preset を適用したあとにいじるもの
 

@@ -17,7 +17,7 @@ use glam::Vec2;
 use image::{Rgba, RgbaImage};
 
 use fractalium::app::session::FractalState;
-use fractalium::core::fractal_line_walk::{for_each_fractal_line_segment, FractalLineSegment};
+use fractalium::core::fractal_line_walk::{FractalLineSegment, for_each_fractal_line_segment};
 use fractalium::fractal_presets::FractalPreset;
 
 /// カード非選択時の背景に揃えた地色（`tiles` の `from_rgb(36, 40, 48)`）。
@@ -32,7 +32,10 @@ const OUT_W: u32 = 352;
 const OUT_H: u32 = 264;
 
 fn main() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/fractalium/preset_thumbnails");
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fractalium/preset_thumbnails"
+    );
     std::fs::create_dir_all(dir).expect("mkdir fractal preset thumbnails");
 
     for &preset in FractalPreset::ALL {
@@ -57,23 +60,21 @@ fn png_stem(p: FractalPreset) -> &'static str {
         FractalPreset::Vicsek => "vicsek",
         FractalPreset::HeighwayDragon => "heighway_dragon",
         FractalPreset::LevyCCurve => "levy_c",
-        FractalPreset::SierpinskiCarpet => "sierpinski_carpet",
         FractalPreset::PythagorasTree => "pythagoras_tree",
         FractalPreset::SierpinskiHexagon => "sierpinski_hexagon",
         FractalPreset::SierpinskiStar => "sierpinski_star",
-        FractalPreset::BinaryFractalTree => "binary_fractal_tree",
         FractalPreset::Terdragon => "terdragon",
+        FractalPreset::HalCycloneTriangle => "hal_cyclone_triangle",
+        FractalPreset::HalWing => "hal_wing",
+        FractalPreset::HalTree => "hal_tree",
+        FractalPreset::HalVStar => "hal_v_star",
+        FractalPreset::HalMosaicWindow => "hal_mosaic_window",
     }
 }
 
 /// Result パネルと同じ規則で色相から sRGB 8bit を得る。
 fn line_rgb_u8(hue_degrees: f32) -> [u8; 3] {
-    let lin = LinearRgba::from(Hsla::new(
-        hue_degrees.rem_euclid(360.0),
-        0.88,
-        0.58,
-        1.0,
-    ));
+    let lin = LinearRgba::from(Hsla::new(hue_degrees.rem_euclid(360.0), 0.88, 0.58, 1.0));
     Srgba::from(lin).to_u8_array_no_alpha()
 }
 
@@ -244,18 +245,10 @@ fn render_new_tile() -> RgbaImage {
     let arm = (OUT_W.min(OUT_H) as f32) * 0.2;
     let half = STROKE_PX * 0.5;
     let rgb = [108, 112, 128];
-    if let Some(qh) = stroke_quad_px(
-        Vec2::new(cx - arm, cy),
-        Vec2::new(cx + arm, cy),
-        half,
-    ) {
+    if let Some(qh) = stroke_quad_px(Vec2::new(cx - arm, cy), Vec2::new(cx + arm, cy), half) {
         fill_quad_pixels(&mut img, &qh, rgb);
     }
-    if let Some(qv) = stroke_quad_px(
-        Vec2::new(cx, cy - arm),
-        Vec2::new(cx, cy + arm),
-        half,
-    ) {
+    if let Some(qv) = stroke_quad_px(Vec2::new(cx, cy - arm), Vec2::new(cx, cy + arm), half) {
         fill_quad_pixels(&mut img, &qv, rgb);
     }
     img

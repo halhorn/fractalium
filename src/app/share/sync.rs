@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 
-use crate::ports::share_link::ShareNavigationPort;
+#[cfg(target_arch = "wasm32")]
+use crate::app::mode_state::startup::ShareUrlRestoredFractal;
 #[cfg(target_arch = "wasm32")]
 use crate::app::platform_handles::PlatformHandles;
 #[cfg(target_arch = "wasm32")]
@@ -17,9 +18,8 @@ use crate::app::session::{
     FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack,
 };
 #[cfg(target_arch = "wasm32")]
-use crate::app::mode_state::startup::ShareUrlRestoredFractal;
-#[cfg(target_arch = "wasm32")]
 use crate::app::share::payload::{decode_readable_share_query, encode_state};
+use crate::ports::share_link::ShareNavigationPort;
 #[cfg(target_arch = "wasm32")]
 use crate::ui::canvas::seed::DrawState;
 

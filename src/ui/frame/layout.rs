@@ -5,9 +5,7 @@ use bevy_egui::egui;
 
 use crate::app::export::{PreparedResultImage, ResultImageOutlet};
 use crate::app::mode_state::AppScreen;
-use crate::app::session::{
-    FractalState, PlacementState, SnapGrid, UiLayout, UndoStack,
-};
+use crate::app::session::{FractalState, PlacementState, SnapGrid, UiLayout, UndoStack};
 use crate::app::share::sync::ShareNavigation;
 use crate::core::shape::Replica;
 use crate::ui::canvas::seed::DrawState;

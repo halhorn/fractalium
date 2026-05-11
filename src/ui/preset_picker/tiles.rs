@@ -222,10 +222,7 @@ fn paint_one_tile(
         egui::Color32::from_rgb(36, 40, 48)
     };
     let stroke = if selected {
-        egui::Stroke::new(
-            1.5,
-            egui::Color32::from_rgb(120, 170, 220),
-        )
+        egui::Stroke::new(1.5, egui::Color32::from_rgb(120, 170, 220))
     } else {
         egui::Stroke::new(1.0, egui::Color32::from_rgb(62, 66, 78))
     };
@@ -234,7 +231,10 @@ fn paint_one_tile(
         .fill(bg)
         .corner_radius(layout.corner_outer)
         .stroke(stroke)
-        .inner_margin(egui::Margin::symmetric(layout.inner_margin, layout.inner_margin))
+        .inner_margin(egui::Margin::symmetric(
+            layout.inner_margin,
+            layout.inner_margin,
+        ))
         .show(ui, |ui| {
             ui.set_width(layout.outer_w);
             ui.vertical_centered(|ui| {
@@ -276,7 +276,8 @@ fn paint_one_tile(
             });
         });
 
-    outer.response
+    outer
+        .response
         .interact(egui::Sense::click())
         .on_hover_cursor(egui::CursorIcon::PointingHand)
 }

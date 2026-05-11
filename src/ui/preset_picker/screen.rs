@@ -12,7 +12,7 @@ use super::header::preset_picker_brand_strip;
 use super::thumbnails::{PresetPickerNeedsInitialFocus, PresetThumbnailCache};
 use super::tiles::paint_preset_tile_grid;
 use super::{
-    PresetPickerTileSelection, PRESET_PANEL_SIDE_MARGIN, PRESET_PANEL_VERTICAL_INNER_MARGIN,
+    PRESET_PANEL_SIDE_MARGIN, PRESET_PANEL_VERTICAL_INNER_MARGIN, PresetPickerTileSelection,
 };
 
 /// 閉じる行・直下のインナー余白（上等し）のみを概算し、ブランド〜タイルまでをスクロール領域に載せるための縦確保。
@@ -75,10 +75,7 @@ pub(crate) fn paint_preset_picker_screen(
                             let from_bevy = (win_w - 2.0 * PRESET_PANEL_SIDE_MARGIN).max(120.0);
                             let from_egui = ui.available_width().min(ui.max_rect().width());
                             // 親から渡す折り返し幅を論理グリッドに載せ、`paint_preset_tile_grid` と同じ規則にする。
-                            let preset_grid_wrap_w = from_egui
-                                .min(from_bevy)
-                                .max(1.0)
-                                .round_ui();
+                            let preset_grid_wrap_w = from_egui.min(from_bevy).max(1.0).round_ui();
                             preset_picker_brand_strip(ui);
                             if let Some(choice) = paint_preset_tile_grid(
                                 ui,

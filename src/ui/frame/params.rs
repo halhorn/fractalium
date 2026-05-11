@@ -120,11 +120,7 @@ fn rotation_row(ui: &mut egui::Ui, rotation: &mut f32) {
         ui.label("Rotation (deg)");
         let mut deg = rotation.to_degrees();
         if ui
-            .add(
-                params_drag_value(&mut deg)
-                    .speed(0.5)
-                    .range(-180.0..=180.0),
-            )
+            .add(params_drag_value(&mut deg).speed(0.5).range(-180.0..=180.0))
             .changed()
         {
             *rotation = deg.to_radians();

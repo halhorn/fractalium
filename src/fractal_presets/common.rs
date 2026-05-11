@@ -1,4 +1,4 @@
-//! プリセット間で共有する `FractalState` 構築ヘルパと座変換。
+//! プリセット間で共有する `FractalState` 構築ヘルパと、定形多角形の頂点列。
 
 use bevy::prelude::Vec2;
 
@@ -18,17 +18,6 @@ pub(super) fn state(
         depth,
         show_all_generations,
     }
-}
-
-/// `Replica::apply` と同じ定義（反時計回りが正）で -90°。
-#[inline]
-pub(super) fn rotate_neg_90(v: Vec2) -> Vec2 {
-    Vec2::new(v.y, -v.x)
-}
-
-#[inline]
-pub(super) fn flip_y(v: Vec2) -> Vec2 {
-    Vec2::new(v.x, -v.y)
 }
 
 /// `BaseShapePreset::Triangle` と同じ 3 頂点（線分の始点を順に繋ぐ）。

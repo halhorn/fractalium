@@ -27,8 +27,8 @@ use crate::ui::canvas::result::navigation::fit_result_camera_if_requested;
 use crate::ui::canvas::seed::DrawState;
 use crate::ui::feedback::toast::{DeferredToast, EguiToast};
 use crate::ui::preset_picker::{
-    paint_preset_picker_screen, reset_preset_picker_on_enter, PresetPickerNeedsInitialFocus,
-    PresetPickerTileSelection, PresetThumbnailCache,
+    PresetPickerNeedsInitialFocus, PresetPickerTileSelection, PresetThumbnailCache,
+    paint_preset_picker_screen, reset_preset_picker_on_enter,
 };
 
 use self::frame::depth_controller::paint_depth_controls;
@@ -144,10 +144,8 @@ fn params_panel(
                 &mut flow.tile_sel,
                 &mut flow.focus_flag,
             );
-            let full_window = egui::Rect::from_min_max(
-                egui::pos2(0.0, 0.0),
-                egui::pos2(win_w, win_h),
-            );
+            let full_window =
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(win_w, win_h));
             (egui::Rect::NOTHING, egui::Rect::NOTHING, full_window)
         }
         AppScreen::Editing => {
@@ -194,7 +192,12 @@ fn params_panel(
     };
 
     if matches!(current_screen, AppScreen::Editing) {
-        paint_depth_controls(ctx, result_egui_rect, &mut fractal_panel.fractal, &mut fractal_panel.layout);
+        paint_depth_controls(
+            ctx,
+            result_egui_rect,
+            &mut fractal_panel.fractal,
+            &mut fractal_panel.layout,
+        );
     }
     toast.paint(ctx);
     if let Ok(mut cam) = cameras.edit_cam.single_mut() {

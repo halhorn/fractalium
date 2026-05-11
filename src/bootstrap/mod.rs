@@ -7,8 +7,8 @@ use bevy::prelude::*;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
 use crate::app::export::{ResultExportPlugin, ResultImageOutlet};
-use crate::app::mode_state::startup::BootstrapUsedPresetEnv;
 use crate::app::mode_state::AppScreenPlugin;
+use crate::app::mode_state::startup::BootstrapUsedPresetEnv;
 use crate::app::platform_handles::PlatformHandles;
 use crate::app::session::{CanvasLayout, FractalState, SnapGrid, UiLayout};
 use crate::app::session_rules::clamp_fractal_state_depth;

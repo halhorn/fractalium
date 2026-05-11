@@ -3,9 +3,7 @@
 use bevy::prelude::*;
 
 use super::routing::AppScreen;
-use super::startup::{
-    resolve_initial_app_screen, BootstrapUsedPresetEnv, ShareUrlRestoredFractal,
-};
+use super::startup::{BootstrapUsedPresetEnv, ShareUrlRestoredFractal, resolve_initial_app_screen};
 
 /// `AppScreen` を [`States`] として載せ、[Startup](bevy::prelude::Startup) で初期遷移を確定する。
 pub struct AppScreenPlugin;
