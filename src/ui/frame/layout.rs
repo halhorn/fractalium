@@ -173,6 +173,7 @@ pub(crate) fn layout_narrow(
             let scroll_h = (panel_h - 48.0).max(40.0);
             egui::ScrollArea::vertical()
                 .max_height(scroll_h)
+                .auto_shrink([false, true])
                 .show(ui, |ui| {
                     draw_params_controls(ui, state, undo_stack);
                 });

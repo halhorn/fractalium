@@ -7,6 +7,9 @@ use crate::app::session::{FractalState, UiLayout, UndoStack};
 use crate::core::shape::{REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
 use crate::ui::canvas::result::scene::result_replica_color;
 
+/// Parameters の `DragValue` に表示する有効数字の桁数。
+const PARAM_DRAG_VALUE_SIG_FIGS: usize = 6;
+
 /// 折りたたみ状態を含むパラメータパネル全体（wide: 右ドック、narrow: ヘッダのみの切り替えを含む）。
 pub(crate) fn draw_params_panel(
     ui: &mut egui::Ui,
@@ -26,9 +29,11 @@ pub(crate) fn draw_params_panel(
             ui.heading("Parameters");
         });
         ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            draw_params_controls(ui, state, undo_stack);
-        });
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                draw_params_controls(ui, state, undo_stack);
+            });
     }
 }
 
@@ -91,18 +96,18 @@ fn replica_title_color(i: usize, total: usize) -> egui::Color32 {
     )
 }
 
-/// レプリカの平行移動 TX/TY（正規化座標）。
+/// レプリカの平行移動 X/Y（正規化座標）。
 fn position_row(ui: &mut egui::Ui, position: &mut Vec2) {
     ui.horizontal(|ui| {
-        ui.label("TX");
+        ui.label("X");
         ui.add(
-            egui::DragValue::new(&mut position.x)
+            params_drag_value(&mut position.x)
                 .speed(0.01)
                 .range(-2.0..=2.0),
         );
-        ui.label("TY");
+        ui.label("Y");
         ui.add(
-            egui::DragValue::new(&mut position.y)
+            params_drag_value(&mut position.y)
                 .speed(0.01)
                 .range(-2.0..=2.0),
         );
@@ -112,11 +117,11 @@ fn position_row(ui: &mut egui::Ui, position: &mut Vec2) {
 /// レプリカの回転（度入力・内部はラジアン）。
 fn rotation_row(ui: &mut egui::Ui, rotation: &mut f32) {
     ui.horizontal(|ui| {
-        ui.label("Rot (deg)");
+        ui.label("Rotation (deg)");
         let mut deg = rotation.to_degrees();
         if ui
             .add(
-                egui::DragValue::new(&mut deg)
+                params_drag_value(&mut deg)
                     .speed(0.5)
                     .range(-180.0..=180.0),
             )
@@ -132,9 +137,52 @@ fn scale_row(ui: &mut egui::Ui, scale: &mut f32) {
     ui.horizontal(|ui| {
         ui.label("Scale");
         ui.add(
-            egui::DragValue::new(scale)
+            params_drag_value(scale)
                 .speed(0.005)
                 .range(REPLICA_SCALE_MIN..=REPLICA_SCALE_MAX),
         );
     });
+}
+
+/// `n` を有効数字 [`PARAM_DRAG_VALUE_SIG_FIGS`] 桁で表示用に整形する。
+///
+/// # 引数
+/// - `n`: 表示する値。
+///
+/// # 戻り値
+/// 整形済みの文字列（非有限は `to_string` に委ねる）。
+fn format_param_drag_value(n: f64) -> String {
+    if !n.is_finite() {
+        return n.to_string();
+    }
+    if n == 0.0 {
+        return format!("{:.6}", 0.0_f64);
+    }
+    let exp = n.abs().log10().floor() as i32;
+    let dp = (PARAM_DRAG_VALUE_SIG_FIGS as i32 - 1 - exp).clamp(0, 15) as usize;
+    format!("{:.*}", dp, n)
+}
+
+/// Parameters の数値入力を `f64` に戻す。
+///
+/// # 引数
+/// - `s`: ユーザーが編集したテキスト。
+///
+/// # 戻り値
+/// パースできた場合はその値。失敗時は `None`。
+fn parse_param_drag_value(s: &str) -> Option<f64> {
+    s.trim().parse().ok()
+}
+
+/// Parameters で共通する、有効数字付き [`egui::DragValue`]。
+///
+/// # 引数
+/// - `value`: バインドする `f32` への可変参照。
+///
+/// # 戻り値
+/// `.speed` / `.range` などを続けて表示用に調整できる [`egui::DragValue`]。
+fn params_drag_value<'a>(value: &'a mut f32) -> egui::DragValue<'a> {
+    egui::DragValue::new(value)
+        .custom_formatter(|n, _| format_param_drag_value(n))
+        .custom_parser(parse_param_drag_value)
 }
