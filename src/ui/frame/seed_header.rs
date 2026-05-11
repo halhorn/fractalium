@@ -2,11 +2,11 @@
 
 use bevy_egui::egui;
 
-use crate::edit::DrawState;
+use crate::app::session::{FractalState, UndoStack};
 use crate::core::seed_preset::BaseShapePreset;
-use crate::state::{FractalState, UndoStack};
+use crate::ui::canvas::seed::DrawState;
 
-use super::shell::step_glyph_button;
+use super::chrome::step_glyph_button;
 
 /// Seed ブロックのヘッダ右側: **Shape / - / Clear**（ワイド・ナロー共通）。
 ///

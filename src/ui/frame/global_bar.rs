@@ -3,19 +3,19 @@
 use bevy::prelude::Commands;
 use bevy_egui::egui;
 
-use crate::app::fractal_share::{encode_state, share_sheet_text_for_export};
-use crate::app::workspace::replace_fractal_state_keep_snap;
-use crate::edit::DrawState;
-use crate::fractal_presets::FractalPreset;
-use crate::result_export::{
+use crate::app::export::{
     ExportPhase, PreparedResultImage, PreparedResultImageState, RequestResultImageExport,
     ResultImageOutlet, deliver_prepared_result_png,
 };
-use crate::share::{ShareNavigation, share_url_from_token};
-use crate::state::{
-    FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack,
+use crate::app::session::{
+    FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, SnapGrid, UndoStack,
 };
-use crate::toast::{DeferredToast, EguiToast};
+use crate::app::session_rules::replace_fractal_state;
+use crate::app::share::payload::{encode_state, share_sheet_text_for_export};
+use crate::app::share::sync::{ShareNavigation, share_url_from_token};
+use crate::fractal_presets::FractalPreset;
+use crate::ui::canvas::seed::DrawState;
+use crate::ui::feedback::toast::{DeferredToast, EguiToast};
 
 /// undo / redo / snap を並べた操作バー（狭い幅では左側グループが折り返し）。Share は常にバー右端。
 #[allow(clippy::too_many_arguments)] // wide / narrow の `layout_*` と同じリソースをそのまま受け渡す。
@@ -23,6 +23,7 @@ pub(crate) fn global_controls_bar(
     ui: &mut egui::Ui,
     commands: &mut Commands,
     state: &mut FractalState,
+    snap_grid: &mut SnapGrid,
     draw_state: &mut DrawState,
     placement: &mut PlacementState,
     undo_stack: &mut UndoStack,
@@ -56,11 +57,11 @@ pub(crate) fn global_controls_bar(
             ui.add_space(6.0);
 
             let mut snap_btn = egui::Button::new("Snap");
-            if state.snap_grid {
+            if snap_grid.0 {
                 snap_btn = snap_btn.fill(egui::Color32::from_rgb(60, 120, 60));
             }
             if ui.add(snap_btn).clicked() {
-                state.snap_grid = !state.snap_grid;
+                snap_grid.0 = !snap_grid.0;
             }
 
             ui.add_space(6.0);
@@ -69,7 +70,7 @@ pub(crate) fn global_controls_bar(
                 for &preset in FractalPreset::ALL {
                     if ui.button(preset.label()).clicked() {
                         undo_stack.push(state.clone());
-                        replace_fractal_state_keep_snap(state, preset.build());
+                        replace_fractal_state(state, preset.build());
                         *draw_state = DrawState::Idle;
                         placement.selected = None;
                         placement.drag = PlacementDrag::Idle;

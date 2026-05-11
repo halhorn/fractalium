@@ -3,9 +3,9 @@
 use bevy::prelude::Vec2;
 use bevy_egui::egui;
 
+use crate::app::session::{FractalState, UiLayout, UndoStack};
 use crate::core::shape::{REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
-use crate::fractal::result_replica_color;
-use crate::state::{FractalState, UiLayout, UndoStack};
+use crate::ui::canvas::result::scene::result_replica_color;
 
 /// 折りたたみ状態を含むパラメータパネル全体（wide: 右ドック、narrow: ヘッダのみの切り替えを含む）。
 pub(crate) fn draw_params_panel(

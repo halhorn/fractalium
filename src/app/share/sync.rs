@@ -1,6 +1,6 @@
 //! フラグメント `#<可読クエリ>` による URL 同期と Bevy プラグイン。
 //!
-//! クエリ本文の符号化は [`crate::encoding::flat_query_codec`]、ドメイン検証は [`crate::app`]。
+//! クエリ本文の符号化は [`crate::encoding::flat_query_codec`]、ドメイン検証は [`super::payload`]。
 //! `from=share` のようなナビゲーション用 search の操作もこのモジュールに置く（フラグメント本体とは別）。
 
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
@@ -9,22 +9,59 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 
-#[cfg(target_arch = "wasm32")]
-use crate::edit::DrawState;
-#[cfg(target_arch = "wasm32")]
-use crate::platform_handles::PlatformHandles;
 use crate::ports::share_link::ShareNavigationPort;
-
 #[cfg(target_arch = "wasm32")]
-use crate::app::fractal_share::{decode_readable_share_query, encode_state};
+use crate::app::platform_handles::PlatformHandles;
 #[cfg(target_arch = "wasm32")]
-use crate::state::{
+use crate::app::session::{
     FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack,
 };
+#[cfg(target_arch = "wasm32")]
+use crate::app::share::payload::{decode_readable_share_query, encode_state};
+#[cfg(target_arch = "wasm32")]
+use crate::ui::canvas::seed::DrawState;
+
+/// メッシュ確定後の URL 同期などに使う環境側ナビゲーション。具象は `platform`、`main` で注入する。
+#[derive(Resource, Clone)]
+pub struct ShareNavigation(pub Arc<dyn ShareNavigationPort + Send + Sync>);
+
+/// [`ShareNavigation`] 経由で、共有クエリ本文からページ全体の共有 URL を組み立てる。
+///
+/// # 引数
+/// - `nav` — プラットフォーム注入のナビゲーション実装。
+/// - `query` — フラグメントに載せる可読クエリ本文（先頭 `#` は含めない）。
+///
+/// # 戻り値
+/// 組み立てに成功した完全 URL。環境側の組み立て失敗時は `Err`（文言は実装依存）。
+pub fn share_url_from_token(nav: &ShareNavigation, query: &str) -> Result<String, String> {
+    nav.0.full_share_page_url_with_readable_body(query)
+}
+
+/// URL 同期を登録する Bevy プラグイン（WASM で起動ハイドラとメッシュ確定後のフラッシュのみ追加）。
+pub struct SharePlugin;
+
+impl Plugin for SharePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<PendingShareUrlSync>();
+        #[cfg(target_arch = "wasm32")]
+        {
+            app.add_systems(Startup, hydrate_from_url);
+            app.add_systems(
+                PostUpdate,
+                flush_share_url_after_fractal_mesh
+                    .after(crate::ui::canvas::result::scene::FractalPostUpdateSet::UpdateMesh),
+            );
+        }
+    }
+}
 
 /// Copy link 用に、`location` の search に `from=share` を 1 回だけ足す（既にあるときは何もしない）。
 ///
-/// `base` は `#` を含まない `href` のプレフィックス（origin+pathname+search）を想定。
+/// # 引数
+/// - `base_href_without_fragment` — `#` を含まない `href` のプレフィックス（origin+pathname+search）。
+///
+/// # 戻り値
+/// `from=share` を付与済みまたは既存と同一のベース URL。
 pub(crate) fn href_with_from_share_query(base_href_without_fragment: &str) -> String {
     if query_has_from_share(base_href_without_fragment) {
         return base_href_without_fragment.to_string();
@@ -36,27 +73,13 @@ pub(crate) fn href_with_from_share_query(base_href_without_fragment: &str) -> St
     }
 }
 
-fn query_has_from_share(href: &str) -> bool {
-    let Some((_path, query)) = href.split_once('?') else {
-        return false;
-    };
-    for pair in query.split('&') {
-        let mut parts = pair.splitn(2, '=');
-        let Some(name) = parts.next() else {
-            continue;
-        };
-        if name != "from" {
-            continue;
-        }
-        let value = parts.next().unwrap_or("");
-        if value == "share" {
-            return true;
-        }
-    }
-    false
-}
-
 /// メッシュ同期でアドレスバーを書き換えるとき、`search` の `from=share` を落とす。
+///
+/// # 引数
+/// - `base_href_without_fragment` — `#` を含まない `href` のプレフィックス。
+///
+/// # 戻り値
+/// `from=share` のみ除去したベース URL。クエリが空になれば `path` のみ。
 pub(crate) fn strip_from_share_query_param(base_href_without_fragment: &str) -> String {
     let Some((path, query)) = base_href_without_fragment.split_once('?') else {
         return base_href_without_fragment.to_string();
@@ -79,18 +102,34 @@ pub(crate) fn strip_from_share_query_param(base_href_without_fragment: &str) -> 
     }
 }
 
-/// メッシュ確定後の URL 同期などに使う環境側ナビゲーション。具象は `platform`、`main` で注入する。
-#[derive(Resource, Clone)]
-pub struct ShareNavigation(pub Arc<dyn ShareNavigationPort + Send + Sync>);
-
-pub fn share_url_from_token(nav: &ShareNavigation, query: &str) -> Result<String, String> {
-    nav.0.full_share_page_url_with_readable_body(query)
-}
-
 /// Result メッシュを実際に更新したフレームだけ立て、`flush_share_url_after_fractal_mesh` が URL を同期する。
 #[derive(Resource, Default)]
 pub(crate) struct PendingShareUrlSync(pub bool);
 
+/// search のクエリ線形表現に `from=share` があるかだけを見る（同名キーの重複には未対応で十分な用途）。
+fn query_has_from_share(href: &str) -> bool {
+    let Some((_path, query)) = href.split_once('?') else {
+        return false;
+    };
+    for pair in query.split('&') {
+        let mut parts = pair.splitn(2, '=');
+        let Some(name) = parts.next() else {
+            continue;
+        };
+        if name != "from" {
+            continue;
+        }
+        let value = parts.next().unwrap_or("");
+        if value == "share" {
+            return true;
+        }
+    }
+    false
+}
+
+/// メッシュ更新のあとだけ走り、`FractalState` をエンコードしてアドレスバーのフラグメントを差し替える。
+///
+/// 直前フレームと同一トークンなら、`ShareNavigationPort` が既に同等なら無駄撃ちしない。
 #[cfg(target_arch = "wasm32")]
 fn flush_share_url_after_fractal_mesh(
     state: Res<FractalState>,
@@ -119,23 +158,7 @@ fn flush_share_url_after_fractal_mesh(
     }
 }
 
-pub struct SharePlugin;
-
-impl Plugin for SharePlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<PendingShareUrlSync>();
-        #[cfg(target_arch = "wasm32")]
-        {
-            app.add_systems(Startup, hydrate_from_url);
-            app.add_systems(
-                PostUpdate,
-                flush_share_url_after_fractal_mesh
-                    .after(crate::fractal::FractalPostUpdateSet::UpdateMesh),
-            );
-        }
-    }
-}
-
+/// 初回：`#` の可読共有クエリを復号できたらワークスペース状態をそれにそろえ、周辺の編集 UX を初期化する。
 #[cfg(target_arch = "wasm32")]
 fn hydrate_from_url(
     platform: Res<PlatformHandles>,

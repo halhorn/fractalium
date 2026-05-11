@@ -2,10 +2,10 @@ use std::f32::consts::{FRAC_PI_4, SQRT_2};
 
 use bevy::prelude::Vec2;
 
-use crate::fractal_presets::common::state;
+use crate::app::session::FractalState;
 use crate::core::seed_preset::BaseShapePreset;
 use crate::core::shape::Replica;
-use crate::state::FractalState;
+use crate::fractal_presets::common::state;
 
 /// Heighway dragon（発端を [-1,1] の水平線分とする 2 変換 IFS）。
 /// ウィキペディア等の [0,1]×R 側の基底式と、[-1,1] の種を結ぶ Φ(x,y)=(2x-1,2y)

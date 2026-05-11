@@ -15,13 +15,14 @@ use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::bootstrap::{placement_layer, PlacementCamera};
-use crate::core::shape::{Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
-use crate::fractal::result_replica_color;
-use crate::grid::{draw_fine_grid, snap_to_fine_grid};
-use crate::state::{
-    CanvasLayout, DoubleTapZoomActive, FractalState, PlacementDrag, PlacementState, UndoStack,
+use crate::app::session::{
+    CanvasLayout, DoubleTapZoomActive, FractalState, PlacementDrag, PlacementState, SnapGrid,
+    UndoStack,
 };
+use crate::bootstrap::{PlacementCamera, placement_layer};
+use crate::core::shape::{Line, REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
+use crate::ui::canvas::grid_overlay::{draw_fine_grid, snap_to_fine_grid};
+use crate::ui::canvas::result::scene::result_replica_color;
 
 // === 定数 ===
 
@@ -224,6 +225,7 @@ fn world_to_egui_pos(
 fn handle_placement_input(
     mut state: ResMut<FractalState>,
     mut placement: ResMut<PlacementState>,
+    snap_grid: Res<SnapGrid>,
     mut undo_stack: ResMut<UndoStack>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -240,9 +242,8 @@ fn handle_placement_input(
     let Ok((cam, cam_tf)) = placement_cam.single() else {
         return;
     };
-    let ctrl = keys.pressed(KeyCode::ControlLeft)
-        || keys.pressed(KeyCode::ControlRight)
-        || state.snap_grid;
+    let ctrl =
+        keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || snap_grid.0;
 
     // === タッチ入力管理 ===
     let touch_count = touches.iter().count();
@@ -598,14 +599,13 @@ fn update_placement_cursor(
 /// Ctrl 押下中に細かいグリッドドットを表示する。
 fn draw_placement_ctrl_grid(
     keys: Res<ButtonInput<KeyCode>>,
-    state: Res<FractalState>,
+    snap_grid: Res<SnapGrid>,
     windows: Query<&Window, With<PrimaryWindow>>,
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
     mut gizmos: Gizmos<PlacementGizmos>,
 ) {
-    let ctrl = keys.pressed(KeyCode::ControlLeft)
-        || keys.pressed(KeyCode::ControlRight)
-        || state.snap_grid;
+    let ctrl =
+        keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) || snap_grid.0;
     if !ctrl {
         return;
     }

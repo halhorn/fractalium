@@ -1,81 +1,23 @@
+//! 複数画面にまたがる編集状態
+//! - Undo スタック
+//! - Placement の編集中状態
+//! - Seed / Placement で共有する格子吸着フラグ
+
 use bevy::prelude::*;
 
-use crate::core::shape::{BaseShape, Replica};
+use super::fractal_state::FractalState;
 
-/// フラクタル全体の状態を表す Bevy リソース。
-/// 「基図形 → 複製ルール → 再帰深さ」の 3 要素でフラクタルが一意に決まる。
-/// 座標は正規化キャンバス座標 [-1, 1] x [-1, 1] を用いる。
-#[derive(Resource, Clone)]
-pub struct FractalState {
-    /// 再帰の元となる基図形（線分の集合）
-    pub base_shape: BaseShape,
-    /// 再帰時に基図形を配置する複製変換のリスト
-    pub replicas: Vec<Replica>,
-    /// 再帰の深さ（1 = 基図形のみ、2 以上で replicas が適用される）
-    pub depth: u32,
-    /// true のとき、末端世代だけでなく途中世代の図形も描画する
-    pub show_all_generations: bool,
-    /// グリッドスナップ（Ctrl 相当）のトグル状態。
-    pub snap_grid: bool,
-}
-
-impl Default for FractalState {
-    /// 初期状態：基図形・複製ともに空、深さは 4。
-    fn default() -> Self {
-        Self {
-            base_shape: BaseShape::default(),
-            replicas: vec![],
-            depth: 4,
-            show_all_generations: false,
-            snap_grid: false,
-        }
-    }
-}
-
-/// 論理ピクセル（左上原点・Y 下向き）の軸平行矩形。ウィンドウ座標と egui と揃える。
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ScreenRect {
-    pub min: Vec2,
-    pub max: Vec2,
-}
-
-impl ScreenRect {
-    pub fn contains(&self, pos: Vec2) -> bool {
-        pos.x >= self.min.x && pos.x <= self.max.x && pos.y >= self.min.y && pos.y <= self.max.y
-    }
-}
-
-/// Placement キャンバスの論理ピクセル矩形（egui オーバーレイの位置合わせに使用）。
-#[derive(Resource, Default)]
-pub struct CanvasLayout {
-    pub placement_min_x: f32,
-    pub placement_max_x: f32,
-    pub placement_min_y: f32,
-    pub placement_max_y: f32,
-    /// Result に重ねている Depth／Show generations の描画矩形。None のときビュー入力は矩形で止めない。
-    pub result_depth_controls_rect: Option<ScreenRect>,
-}
-
-/// ダブルタップドラッグによるズームが進行中かどうかを示すフラグ。
-/// edit / placement システムがタッチ入力を無視するために参照する。
-#[derive(Resource, Default)]
-pub struct DoubleTapZoomActive(pub bool);
-
-/// URL からの復元やフルプリセット適用後、Result カメラを図形に合わせる。
-#[derive(Resource, Default)]
-pub struct PendingResultCameraFit(pub bool);
-
-/// UI レイアウト状態（パネルの折りたたみなど）を保持するリソース。
+/// Seed / Placement で Ctrl 相当の格子吸着を有効にするか。
 #[derive(Resource)]
-pub struct UiLayout {
-    pub params_collapsed: bool,
-}
+pub struct SnapGrid(
+    /// トグルオンなら Ctrl 省略時も細かい格子スナップを有効扱いにする。
+    pub bool,
+);
 
-impl Default for UiLayout {
+impl Default for SnapGrid {
+    /// 既定はオフ。
     fn default() -> Self {
-        Self {
-            params_collapsed: true,
-        }
+        Self(false)
     }
 }
 
@@ -87,7 +29,7 @@ pub struct PlacementState {
     /// 現在進行中のドラッグ操作。
     pub drag: PlacementDrag,
     /// Ctrl+C でコピーしたレプリカ。
-    pub clipboard: Option<Replica>,
+    pub clipboard: Option<crate::core::shape::Replica>,
 }
 
 /// Placement パネルのドラッグ操作の種別と開始時のスナップショット。
@@ -161,9 +103,12 @@ impl UndoStack {
         }
     }
 
+    /// Undo 可能か。
     pub fn can_undo(&self) -> bool {
         !self.history.is_empty()
     }
+
+    /// Redo 可能か。
     pub fn can_redo(&self) -> bool {
         !self.redo_stack.is_empty()
     }

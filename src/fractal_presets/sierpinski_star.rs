@@ -1,7 +1,7 @@
-use crate::fractal_presets::common::{pentagon_vertices, state};
+use crate::app::session::FractalState;
 use crate::core::seed_preset::BaseShapePreset;
 use crate::core::shape::Replica;
-use crate::state::FractalState;
+use crate::fractal_presets::common::{pentagon_vertices, state};
 
 /// 正五角星（ペンタグラム）の各先端方向へ 1/3 縮小。
 pub(super) fn build() -> FractalState {

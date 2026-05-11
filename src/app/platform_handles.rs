@@ -3,7 +3,8 @@
 //! [`ShareNavigation`] と [`ResultImageOutlet`] を **1 つの [`Resource`]** に束ね、`params_panel` などではこの型だけ参照すればよいようにする。[`crate::platform`] のファクトリを呼ぶのは `main` だけ。
 use bevy::prelude::Resource;
 
-use crate::{result_export::ResultImageOutlet, share::ShareNavigation};
+use crate::app::export::ResultImageOutlet;
+use crate::app::share::sync::ShareNavigation;
 
 /// 起動時に `platform` のファクトリで詰めるインファ束。複数ポートをひとつの Bevy の `Resource` に載せるためのコンテナ。
 #[derive(Resource, Clone)]

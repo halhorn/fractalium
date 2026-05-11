@@ -1,36 +1,31 @@
 //! 右側のパラメータパネル（egui）と左側ペイン（Seed / Placement）の描画、
 //! および各カメラへのビューポート分配を提供するモジュール。
 //!
-//! 幅 700px 以上: 左サイドパネル（Undo/Snap を含む操作バー + Edit + Placement）+ 中央 Result + 右パラメータパネル。
-//! Result ウィンドウ左上に Depth（スライダー＋数値）と Show generations のトグルを重ね表示する。
-//! 幅 700px 未満: 最上部タイトル + 中段 Result（上記オーバーレイを含む）
-//!               + Undo/Snap グローバル操作バー + 下部 (Edit | Placement)
-//!               + Parameters（折りたたみ／展開時は Result と干渉しない下部パネル）
+//! **フレーム**（パネル・タイトル帯）は [`frame`]。**ワールドキャンバス**（シード／配置／結果と格子）は [`canvas`]。
+//! [`viewport_bridge`] は egui 矩形から [`bevy::camera::Camera`] のビューポートへ写すだけの橋渡し。
 
-mod depth_controller;
-mod global_bar;
-mod layout;
-mod params;
-mod seed_header;
-mod shell;
-mod viewport;
+pub mod canvas;
+pub mod feedback;
+mod frame;
+mod viewport_bridge;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 
-use crate::edit::DrawState;
-use crate::platform_handles::PlatformHandles;
-use crate::result_export::PreparedResultImage;
-use crate::state::{
-    CanvasLayout, FractalState, PendingResultCameraFit, PlacementState, UiLayout, UndoStack,
+use crate::app::export::PreparedResultImage;
+use crate::app::platform_handles::PlatformHandles;
+use crate::app::session::{
+    CanvasLayout, FractalState, PendingResultCameraFit, PlacementState, SnapGrid, UiLayout,
+    UndoStack,
 };
-use crate::toast::{DeferredToast, EguiToast};
-use crate::view::fit_result_camera_if_requested;
+use crate::ui::canvas::result::navigation::fit_result_camera_if_requested;
+use crate::ui::canvas::seed::DrawState;
+use crate::ui::feedback::toast::{DeferredToast, EguiToast};
 
-use depth_controller::paint_depth_controls;
-use layout::{layout_narrow, layout_wide};
-use viewport::{ViewportCamerasMut, egui_rect_to_viewport};
+use self::frame::depth_controller::paint_depth_controls;
+use self::frame::layout::{layout_narrow, layout_wide};
+use self::viewport_bridge::{ViewportCamerasMut, egui_rect_to_viewport};
 
 /// egui のメインコンテキストPassでパネルとビューポートを更新する [`Plugin`]。
 pub struct UiPlugin;
@@ -58,6 +53,7 @@ fn params_panel(
     mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut state: ResMut<FractalState>,
+    mut snap_grid: ResMut<SnapGrid>,
     mut draw_state: ResMut<DrawState>,
     mut undo_stack: ResMut<UndoStack>,
     mut placement: ResMut<PlacementState>,
@@ -94,6 +90,7 @@ fn params_panel(
             win_w,
             win_h,
             &mut state,
+            &mut snap_grid,
             &mut draw_state,
             &mut undo_stack,
             &mut placement,
@@ -112,6 +109,7 @@ fn params_panel(
             win_w,
             win_h,
             &mut state,
+            &mut snap_grid,
             &mut draw_state,
             &mut undo_stack,
             &mut placement,

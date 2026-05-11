@@ -1,9 +1,9 @@
-//! （Web 専用）[`crate::ports::share_link::ShareNavigationPort`] の実装。[`crate::share`] と同じ `from=share` 付与・クエリ削除のヘルパを使い、アドレスバーを共有形式へ合わせる。
+//! （Web 専用）[`crate::ports::share_link::ShareNavigationPort`] の実装。[`crate::app::share::sync`] と同じ `from=share` 付与・クエリ削除のヘルパを使い、アドレスバーを共有形式へ合わせる。
 //!
 //! 起動時のフラグメント復元・メッシュ更新後の `replaceState` がここ経由となる。
 
+use crate::app::share::sync as share;
 use crate::ports::share_link::ShareNavigationPort;
-use crate::share;
 
 /// WASM ブラウザ向けの [`ShareNavigationPort`]。[`share`] の `href` 補助と `history` で Copy link／同期と一致させる。
 #[derive(Clone, Copy, Default)]

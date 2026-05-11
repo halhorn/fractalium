@@ -11,10 +11,10 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
-use crate::bootstrap::{edit_layer, EditCamera};
+use crate::app::session::{DoubleTapZoomActive, FractalState, SnapGrid, UndoStack};
+use crate::bootstrap::{EditCamera, edit_layer};
 use crate::core::shape::Line;
-use crate::grid::{draw_grid, snap_to_grid};
-use crate::state::{DoubleTapZoomActive, FractalState, UndoStack};
+use crate::ui::canvas::grid_overlay::{draw_grid, snap_to_grid};
 
 const MIN_LINE_LEN: f32 = 0.01;
 const CONFIRMED_COLOR: Color = Color::srgb(0.9, 0.9, 1.0);
@@ -87,11 +87,11 @@ struct Modifiers {
 }
 
 impl Modifiers {
-    fn read(keys: &ButtonInput<KeyCode>, state: &FractalState) -> Self {
+    fn read(keys: &ButtonInput<KeyCode>, snap_grid: &SnapGrid) -> Self {
         Self {
             ctrl: keys.pressed(KeyCode::ControlLeft)
                 || keys.pressed(KeyCode::ControlRight)
-                || state.snap_grid,
+                || snap_grid.0,
             shift: keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight),
         }
     }
@@ -186,6 +186,7 @@ fn handle_undo(
 fn handle_drag_input(
     mut draw_state: ResMut<DrawState>,
     mut state: ResMut<FractalState>,
+    snap_grid: Res<SnapGrid>,
     mut undo_stack: ResMut<UndoStack>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -202,7 +203,7 @@ fn handle_drag_input(
     let Ok((cam, cam_tf)) = edit_cam.single() else {
         return;
     };
-    let modifiers = Modifiers::read(&keys, &state);
+    let modifiers = Modifiers::read(&keys, &snap_grid);
 
     // === タッチ入力管理 ===
     let touch_count = touches.iter().count();
@@ -435,6 +436,7 @@ fn handle_drag_input(
 
 fn draw_canvas(
     state: Res<FractalState>,
+    snap_grid: Res<SnapGrid>,
     draw_state: Res<DrawState>,
     keys: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -443,7 +445,7 @@ fn draw_canvas(
 ) {
     draw_confirmed_lines(&state, &draw_state, &mut gizmos);
 
-    let modifiers = Modifiers::read(&keys, &state);
+    let modifiers = Modifiers::read(&keys, &snap_grid);
     let cursor = windows
         .single()
         .ok()

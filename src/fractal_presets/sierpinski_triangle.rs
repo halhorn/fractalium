@@ -1,7 +1,7 @@
-use crate::fractal_presets::common::{state, triangle_vertices};
+use crate::app::session::FractalState;
 use crate::core::seed_preset::BaseShapePreset;
 use crate::core::shape::Replica;
-use crate::state::FractalState;
+use crate::fractal_presets::common::{state, triangle_vertices};
 
 pub(super) fn build() -> FractalState {
     let replicas: Vec<Replica> = triangle_vertices()

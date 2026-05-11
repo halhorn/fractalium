@@ -2,10 +2,10 @@ use std::f32::consts::{FRAC_PI_4, SQRT_2};
 
 use bevy::prelude::Vec2;
 
-use crate::fractal_presets::common::state;
+use crate::app::session::FractalState;
 use crate::core::seed_preset::BaseShapePreset;
 use crate::core::shape::Replica;
-use crate::state::FractalState;
+use crate::fractal_presets::common::state;
 
 pub(super) fn build() -> FractalState {
     let a0 = FRAC_PI_4;

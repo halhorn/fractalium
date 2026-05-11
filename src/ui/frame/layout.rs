@@ -3,21 +3,21 @@
 use bevy::prelude::Commands;
 use bevy_egui::egui;
 
-use crate::edit::DrawState;
-use crate::result_export::{PreparedResultImage, ResultImageOutlet};
-use crate::share::ShareNavigation;
-use crate::core::shape::Replica;
-use crate::state::{
-    FractalState, PendingResultCameraFit, PlacementState, UiLayout, UndoStack,
+use crate::app::export::{PreparedResultImage, ResultImageOutlet};
+use crate::app::session::{
+    FractalState, PendingResultCameraFit, PlacementState, SnapGrid, UiLayout, UndoStack,
 };
-use crate::toast::{DeferredToast, EguiToast};
+use crate::app::share::sync::ShareNavigation;
+use crate::core::shape::Replica;
+use crate::ui::canvas::seed::DrawState;
+use crate::ui::feedback::toast::{DeferredToast, EguiToast};
 
+use super::chrome::{
+    app_title_bar_contents, app_title_panel_frame, show_canvas_block, step_glyph_button,
+};
 use super::global_bar::global_controls_bar;
 use super::params::{draw_params_controls, draw_params_panel};
 use super::seed_header::base_shape_header_buttons;
-use super::shell::{
-    app_title_bar_contents, app_title_panel_frame, show_canvas_block, step_glyph_button,
-};
 
 /// 幅 700px 以上: 左ペイン・中央 Result・右 Parameters。戻り値は (edit, placement, result) の論理矩形。
 #[allow(clippy::too_many_arguments)] // 1 フレーム分のレイアウトに必要なリソースを束ねるだけの関数。
@@ -27,6 +27,7 @@ pub(crate) fn layout_wide(
     _win_w: f32,
     win_h: f32,
     state: &mut FractalState,
+    snap_grid: &mut SnapGrid,
     draw_state: &mut DrawState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
@@ -70,6 +71,7 @@ pub(crate) fn layout_wide(
                         ui,
                         commands,
                         state,
+                        snap_grid,
                         draw_state,
                         placement,
                         undo_stack,
@@ -124,6 +126,7 @@ pub(crate) fn layout_narrow(
     win_w: f32,
     _win_h: f32,
     state: &mut FractalState,
+    snap_grid: &mut SnapGrid,
     draw_state: &mut DrawState,
     undo_stack: &mut UndoStack,
     placement: &mut PlacementState,
@@ -218,6 +221,7 @@ pub(crate) fn layout_narrow(
                 ui,
                 commands,
                 state,
+                snap_grid,
                 draw_state,
                 placement,
                 undo_stack,

@@ -3,8 +3,8 @@
 //! [`crate::core::budget::max_depth_for_budget`] と [`FractalState`] をずらさないため、
 //! URL 復号・プリセット適用・UI のトグル後などはこのモジュールで深度を正規化する。
 
+use crate::app::session::FractalState;
 use crate::core::budget::max_depth_for_budget;
-use crate::state::FractalState;
 
 /// 現在の基図形・複製・描画モードから見た予算で `depth` を [1, cap] に収める。
 ///
@@ -22,19 +22,17 @@ pub fn clamp_fractal_state_depth(state: &mut FractalState) {
     state.depth = state.depth.min(cap).max(1);
 }
 
-/// フルプリセット適用など、状態ごと差し替えるときにグリッドスナップだけ維持し、深度を予算に合わせる。
+/// フラクタル定義だけを別状態へ載せ替え、深さを予算へ合わせる。
 ///
-/// `new_state` に含まれる `snap_grid` は捨て、現在の `state.snap_grid` を引き継ぐ。
+/// プリセット適用など、幾何・レプリカ一式を丸ごと入れ替える経路で使う。
 ///
 /// # 引数
 /// - `state` — 差し替え先（上書きされる）。
-/// - `new_state` — プリセットなどから組み立てた次の全体状態。
+/// - `new_state` — プリセットなどから組み立てた次のフラクタル定義。
 ///
 /// # 戻り値
 /// なし。
-pub fn replace_fractal_state_keep_snap(state: &mut FractalState, mut new_state: FractalState) {
-    let snap = state.snap_grid;
-    new_state.snap_grid = snap;
+pub fn replace_fractal_state(state: &mut FractalState, new_state: FractalState) {
     *state = new_state;
     clamp_fractal_state_depth(state);
 }

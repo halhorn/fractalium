@@ -60,8 +60,8 @@ impl FractalPreset {
         }
     }
 
-    /// `snap_grid` は呼び出し側で引き継ぐ。`common::state` では `false` で埋めておく。
-    pub fn build(self) -> crate::state::FractalState {
+    /// フラクタル定義のみを構築する。
+    pub fn build(self) -> crate::app::session::FractalState {
         match self {
             FractalPreset::SierpinskiTriangle => sierpinski_triangle::build(),
             FractalPreset::KochCurve => koch_curve::build(),

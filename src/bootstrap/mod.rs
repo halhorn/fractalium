@@ -6,18 +6,18 @@ use bevy::camera::{OrthographicProjection, Projection, ScalingMode, visibility::
 use bevy::prelude::*;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
-use crate::app::workspace::clamp_fractal_state_depth;
-use crate::edit::EditPlugin;
-use crate::fractal::FractalPlugin;
+use crate::app::export::{ResultExportPlugin, ResultImageOutlet};
+use crate::app::platform_handles::PlatformHandles;
+use crate::app::session::{CanvasLayout, FractalState, SnapGrid, UiLayout};
+use crate::app::session_rules::clamp_fractal_state_depth;
+use crate::app::share::{ShareNavigation, SharePlugin};
 use crate::fractal_presets::FractalPreset;
-use crate::placement::PlacementPlugin;
 use crate::platform;
-use crate::platform_handles::PlatformHandles;
-use crate::result_export::{ResultExportPlugin, ResultImageOutlet};
-use crate::share::{ShareNavigation, SharePlugin};
-use crate::state::{CanvasLayout, FractalState, UiLayout};
 use crate::ui::UiPlugin;
-use crate::view::ViewPlugin;
+use crate::ui::canvas::placement::PlacementPlugin;
+use crate::ui::canvas::result::navigation::ViewPlugin;
+use crate::ui::canvas::result::scene::FractalPlugin;
+use crate::ui::canvas::seed::EditPlugin;
 
 /// Edit キャンバスを描画するカメラのマーカーコンポーネント。
 #[derive(Component)]
@@ -82,6 +82,7 @@ pub fn run() {
         })
         .insert_resource(initial_fractal_state())
         .insert_resource(CanvasLayout::default())
+        .insert_resource(SnapGrid::default())
         .insert_resource(UiLayout::default())
         .add_systems(Startup, setup)
         .run();

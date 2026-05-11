@@ -14,13 +14,12 @@ use bevy::{
     },
 };
 
+use crate::app::session::FractalState;
 use crate::bootstrap::result_export_layer;
-
 use crate::ports::png_export::PngExportSink;
-use crate::fractal::{FractalExportMesh, rebuild_fractal_export_mesh};
-use crate::state::FractalState;
-use crate::toast::DeferredToast;
-use crate::view::result_export_projection;
+use crate::ui::canvas::result::navigation::result_export_projection;
+use crate::ui::canvas::result::scene::{FractalExportMesh, rebuild_fractal_export_mesh};
+use crate::ui::feedback::toast::DeferredToast;
 
 /// メニュー経由で届く PNG をプラットフォームへ渡す。具象 trait は [`crate::ports::png_export::PngExportSink`]（実装は `platform`）。
 #[derive(Resource, Clone)]

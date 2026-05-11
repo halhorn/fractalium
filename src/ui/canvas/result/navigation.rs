@@ -6,12 +6,12 @@ use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::bootstrap::{EditCamera, PlacementCamera, ResultCamera};
-use crate::core::shape::{REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
-use crate::fractal::fractal_world_aabb;
-use crate::state::{
+use crate::app::session::{
     CanvasLayout, DoubleTapZoomActive, FractalState, PendingResultCameraFit, PlacementState,
 };
+use crate::bootstrap::{EditCamera, PlacementCamera, ResultCamera};
+use crate::core::shape::{REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
+use crate::ui::canvas::result::scene::fractal_world_aabb;
 
 /// 論理画面上の位置が Depth／generations オーバーレイ上か。
 #[inline]
