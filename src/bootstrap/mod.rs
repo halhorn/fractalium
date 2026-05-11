@@ -7,6 +7,8 @@ use bevy::prelude::*;
 use bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext};
 
 use crate::app::export::{ResultExportPlugin, ResultImageOutlet};
+use crate::app::mode_state::startup::BootstrapUsedPresetEnv;
+use crate::app::mode_state::AppScreenPlugin;
 use crate::app::platform_handles::PlatformHandles;
 use crate::app::session::{CanvasLayout, FractalState, SnapGrid, UiLayout};
 use crate::app::session_rules::clamp_fractal_state_depth;
@@ -53,6 +55,8 @@ pub fn result_export_layer() -> RenderLayers {
 
 /// ネイティブ・WASM 共通の `App` を組み立てて実行する。
 pub fn run() {
+    let (initial_fractal, used_boot_preset) = initial_fractal_state();
+
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -72,6 +76,7 @@ pub fn run() {
             PlacementPlugin,
             ViewPlugin,
             SharePlugin,
+            AppScreenPlugin,
             ResultExportPlugin,
             UiPlugin,
         ))
@@ -80,7 +85,8 @@ pub fn run() {
             share_navigation: ShareNavigation(platform::share_navigation_arc()),
             result_png_outlet: ResultImageOutlet(platform::png_export_sink_arc()),
         })
-        .insert_resource(initial_fractal_state())
+        .insert_resource(initial_fractal)
+        .insert_resource(BootstrapUsedPresetEnv(used_boot_preset))
         .insert_resource(CanvasLayout::default())
         .insert_resource(SnapGrid::default())
         .insert_resource(UiLayout::default())
@@ -89,9 +95,14 @@ pub fn run() {
 }
 
 /// 環境変数プリセットがあればそれから、なければデフォルトの `FractalState` を構築する。
-fn initial_fractal_state() -> FractalState {
+///
+/// # 戻り値
+/// 初期状態と、`FRACTALIUM_BOOT_PRESET` で認識可能な名前が載っていたか（ネイティブの画面上位モード判定用）。
+fn initial_fractal_state() -> (FractalState, bool) {
+    let mut used_boot = false;
     let mut s = if let Ok(raw) = std::env::var("FRACTALIUM_BOOT_PRESET") {
         if let Some(preset) = FractalPreset::from_boot_token(&raw) {
+            used_boot = true;
             preset.build()
         } else {
             FractalState::default()
@@ -100,7 +111,7 @@ fn initial_fractal_state() -> FractalState {
         FractalState::default()
     };
     clamp_fractal_state_depth(&mut s);
-    s
+    (s, used_boot)
 }
 
 /// `index.html` のローディングオーバーレイを非表示にし、アクセシビリティ属性を更新する。

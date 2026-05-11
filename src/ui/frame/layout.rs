@@ -1,11 +1,12 @@
 //! ウィンドウ幅に応じた egui パネル配置。戻り値は Edit / Placement / Result 各カメラ用の論理矩形。
 
-use bevy::prelude::Commands;
+use bevy::prelude::{Commands, NextState};
 use bevy_egui::egui;
 
 use crate::app::export::{PreparedResultImage, ResultImageOutlet};
+use crate::app::mode_state::AppScreen;
 use crate::app::session::{
-    FractalState, PendingResultCameraFit, PlacementState, SnapGrid, UiLayout, UndoStack,
+    FractalState, PlacementState, SnapGrid, UiLayout, UndoStack,
 };
 use crate::app::share::sync::ShareNavigation;
 use crate::core::shape::Replica;
@@ -37,7 +38,7 @@ pub(crate) fn layout_wide(
     prepared_png: &mut PreparedResultImage,
     share_nav: &ShareNavigation,
     png_outlet: &ResultImageOutlet,
-    pending_result_fit: &mut PendingResultCameraFit,
+    next_app_screen: &mut NextState<AppScreen>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     // Right: Params panel
     let params_w = if ui_layout.params_collapsed {
@@ -80,7 +81,7 @@ pub(crate) fn layout_wide(
                         prepared_png,
                         share_nav,
                         png_outlet,
-                        pending_result_fit,
+                        next_app_screen,
                     );
                 });
             ui.separator();
@@ -136,7 +137,7 @@ pub(crate) fn layout_narrow(
     prepared_png: &mut PreparedResultImage,
     share_nav: &ShareNavigation,
     png_outlet: &ResultImageOutlet,
-    pending_result_fit: &mut PendingResultCameraFit,
+    next_app_screen: &mut NextState<AppScreen>,
 ) -> (egui::Rect, egui::Rect, egui::Rect) {
     let canvas_side = (win_w * 0.5 - 24.0).clamp(60.0, 280.0);
     let panel_h = canvas_side + 52.0;
@@ -231,7 +232,7 @@ pub(crate) fn layout_narrow(
                 prepared_png,
                 share_nav,
                 png_outlet,
-                pending_result_fit,
+                next_app_screen,
             );
         });
 

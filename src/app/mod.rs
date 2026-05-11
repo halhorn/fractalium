@@ -6,6 +6,7 @@
 //! - [`session_rules`] … 再帰予算に沿った深度クランプと、プリセット適用時の状態の載せ替え。
 
 pub mod export;
+pub mod mode_state;
 pub mod platform_handles;
 pub mod session;
 pub mod session_rules;

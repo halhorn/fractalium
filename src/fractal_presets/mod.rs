@@ -14,7 +14,7 @@ mod sierpinski_triangle;
 mod terdragon;
 mod vicsek;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FractalPreset {
     SierpinskiTriangle,
     KochCurve,

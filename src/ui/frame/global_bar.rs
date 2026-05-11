@@ -1,19 +1,16 @@
 //! Undo / Redo / Snap / Preset / Share のワイド・ナロー共通ツールバー。
 
-use bevy::prelude::Commands;
+use bevy::prelude::{Commands, NextState};
 use bevy_egui::egui;
 
 use crate::app::export::{
     ExportPhase, PreparedResultImage, PreparedResultImageState, RequestResultImageExport,
     ResultImageOutlet, deliver_prepared_result_png,
 };
-use crate::app::session::{
-    FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, SnapGrid, UndoStack,
-};
-use crate::app::session_rules::replace_fractal_state;
+use crate::app::mode_state::AppScreen;
+use crate::app::session::{FractalState, PlacementState, SnapGrid, UndoStack};
 use crate::app::share::payload::{encode_state, share_sheet_text_for_export};
 use crate::app::share::sync::{ShareNavigation, share_url_from_token};
-use crate::fractal_presets::FractalPreset;
 use crate::ui::canvas::seed::DrawState;
 use crate::ui::feedback::toast::{DeferredToast, EguiToast};
 
@@ -24,15 +21,15 @@ pub(crate) fn global_controls_bar(
     commands: &mut Commands,
     state: &mut FractalState,
     snap_grid: &mut SnapGrid,
-    draw_state: &mut DrawState,
-    placement: &mut PlacementState,
+    _draw_state: &mut DrawState,
+    _placement: &mut PlacementState,
     undo_stack: &mut UndoStack,
     toast: &mut EguiToast,
     deferred_toast: &mut DeferredToast,
     prepared_png: &mut PreparedResultImage,
     share_nav: &ShareNavigation,
     png_outlet: &ResultImageOutlet,
-    pending_result_fit: &mut PendingResultCameraFit,
+    next_app_screen: &mut NextState<AppScreen>,
 ) {
     ui.add_space(4.0);
     let row_h = ui.spacing().interact_size.y;
@@ -65,20 +62,9 @@ pub(crate) fn global_controls_bar(
             }
 
             ui.add_space(6.0);
-            ui.menu_button("Preset", |ui| {
-                ui.set_min_width(200.0);
-                for &preset in FractalPreset::ALL {
-                    if ui.button(preset.label()).clicked() {
-                        undo_stack.push(state.clone());
-                        replace_fractal_state(state, preset.build());
-                        *draw_state = DrawState::Idle;
-                        placement.selected = None;
-                        placement.drag = PlacementDrag::Idle;
-                        pending_result_fit.0 = true;
-                        ui.close();
-                    }
-                }
-            });
+            if ui.button("Preset").clicked() {
+                next_app_screen.set(AppScreen::PresetPicker);
+            }
         });
 
         ui.allocate_ui_with_layout(
