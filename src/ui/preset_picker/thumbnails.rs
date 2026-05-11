@@ -1,5 +1,8 @@
 //! `FractalPreset` ごとの同梱 PNG を `include_bytes!` から解決し、egui テクスチャへ遅延変換する。
 //!
+//! ソース画像は `assets/fractalium/preset_thumbnails/*.png`（現在 352×264、例ツール出力と一致）。
+//! 見た目を差し替えるときは `cargo run --example gen_preset_thumbnails` で同ディレクトリへ書き出す（Result パネルと同じ線分・色相）。
+//!
 //! ビジネスロジック（どのフラクタルにするか等）は載せず、キャッシュのみを担う。
 
 use std::collections::HashMap;

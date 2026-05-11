@@ -14,6 +14,7 @@ use crate::app::session::FractalState;
 use crate::app::share::sync::PendingShareUrlSync;
 use crate::bootstrap::{result_export_layer, result_layer};
 use crate::core::budget::max_depth_for_budget;
+use crate::core::fractal_line_walk::for_each_fractal_line_segment;
 use crate::core::shape::{Line, Replica};
 
 fn clamp_fractal_depth_to_budget(mut state: ResMut<FractalState>) {
@@ -76,13 +77,10 @@ fn update_fractal_mesh(
 
     collect_fractal_segments(
         state.depth,
-        Replica::identity(),
         &state.base_shape.lines,
         &state.replicas,
         &mut positions,
         &mut colors,
-        0.0,
-        360.0,
         state.show_all_generations,
     );
 
@@ -151,53 +149,30 @@ fn setup_fractal_export_mesh(
 
 /// フラクタルを再帰的に展開して頂点座標と色を `positions` / `colors` に積む。
 ///
-/// - `depth`: 残りの再帰回数。
-/// - `show_all_generations`: true のとき末端だけでなく途中世代も描画する。
+/// # 引数
+/// - `depth` — フラクタル状態の深さ。
+/// - `show_all_generations` — 真なら途中世代も描画する。
 fn collect_fractal_segments(
     depth: u32,
-    transform: Replica,
     lines: &[Line],
     replicas: &[Replica],
     positions: &mut Vec<[f32; 3]>,
     colors: &mut Vec<[f32; 4]>,
-    hue: f32,
-    hue_step: f32,
     show_all_generations: bool,
 ) {
-    let is_leaf = depth <= 1 || replicas.is_empty();
-
-    // 末端、または途中世代も描画する設定のとき、この変換を描画する
-    if is_leaf || show_all_generations {
-        let color = hue_to_linear_rgba(hue);
-        for line in lines {
-            let a = transform.apply(line.a);
-            let b = transform.apply(line.b);
-            positions.push([a.x, a.y, 0.0]);
-            positions.push([b.x, b.y, 0.0]);
-            colors.push(color);
-            colors.push(color);
-        }
-    }
-
-    if is_leaf {
-        return;
-    }
-
-    let n = replicas.len() as f32;
-    let child_step = hue_step / n;
-    for (i, replica) in replicas.iter().enumerate() {
-        collect_fractal_segments(
-            depth - 1,
-            transform.compose(*replica),
-            lines,
-            replicas,
-            positions,
-            colors,
-            hue + i as f32 * child_step,
-            child_step,
-            show_all_generations,
-        );
-    }
+    for_each_fractal_line_segment(
+        depth,
+        lines,
+        replicas,
+        show_all_generations,
+        |seg| {
+            let c = hue_to_linear_rgba(seg.hue_degrees);
+            positions.push([seg.a.x, seg.a.y, 0.0]);
+            positions.push([seg.b.x, seg.b.y, 0.0]);
+            colors.push(c);
+            colors.push(c);
+        },
+    );
 }
 
 fn push_segment_thick_quad(

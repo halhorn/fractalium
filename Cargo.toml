@@ -17,6 +17,10 @@ urlencoding = "2"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rfd = "0.15"
 
+[dev-dependencies]
+bevy_color = "0.18"
+glam = "0.30"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 wasm-bindgen = "0.2"

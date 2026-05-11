@@ -5,6 +5,7 @@
 //! に分け、それぞれの責務に含まれるデータと計算だけを置く。フラクタルとして何が起きるかを把握するときの入口にする。
 
 pub mod budget;
+pub mod fractal_line_walk;
 pub mod grid_snap;
 pub mod seed_preset;
 pub mod shape;

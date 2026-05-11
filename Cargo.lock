@@ -2939,6 +2939,7 @@ name = "fractalium"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_color",
  "bevy_egui",
  "glam",
  "image",
