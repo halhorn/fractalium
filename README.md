@@ -1,90 +1,138 @@
 # Fractalium
 
-インタラクティブ・フラクタル生成ツール。基本図形と複製ルールを対話的に編集することで、自己相似フラクタルをリアルタイムに生成・閲覧できる。
+**Seed** の折れ線と、相似変換（平行移動・回転・スケール）として表した **Replica** の一覧を組み合わせて、ブラウザやデスクトップから対話的に IFS 風のフラクタルをいじれるクライアントアプリです。**Depth** や **Replica** を変えると **Result** にすぐ反映されます。
 
-**[▶ ブラウザで試す](https://halhorn.github.io/fractalium/)** — インストール不要。Mac / Windows / iOS / Android 対応。
+https://halhorn.github.io/fractalium/
 
 https://github.com/user-attachments/assets/72efb82c-006f-4da5-bf7b-f2ffbdc30293
 
-## 必要環境
+---
 
-| 版 | 必要なもの |
-|----|-----------|
-| ネイティブ | Rust toolchain（edition 2024 対応版、`rustup` 推奨） |
-| Web（ローカル） | Rust toolchain + `wasm32-unknown-unknown` ターゲット + `trunk` |
+## 試してみる（Web）
 
-## 起動
+### 画面の構成
 
-### ネイティブ
+大きく次の領域に分かれます。
+
+| 領域 | 役割 |
+|------|------|
+| **Seed** | フラクタルの出発となる折れ線を描く・編集する |
+| **Placement** | **Replica** を 2D 上で選び、ドラッグで移動・拡縮・回転する |
+| **Result** | 再帰で生成された図形を表示。**Depth** スライダーと **Show generations** がある |
+| **Parameters** | **Replica 0** 形式の見出しのもとで X/Y・**Rotation (deg)**・**Scale** などを数値編集する |
+| 画面上部〜左のバー | 戻る／進む、**Snap**、**Preset**、**Share** など |
+
+### プリセットの出し方
+
+まずはプリセットからフラクタルを表示してみましょう。
+
+**Preset** をクリックしてお好きなフラクタルを選んでください。
+
+**Preset** は **Seed**・**Replica**・**Depth**・（プリセットによっては）**Show generations** のオン／オフまでまとめて差し替えます。すでに編集している内容は上書きされるので、必要なら共有リンクの保存などをしてから選びます。
+
+| **Preset** メニュー名 | 概要 |
+|----------------------|------|
+| Sierpiński triangle | 正三角形から中央の三角形を繰り返し取り除く古典的フラクタル。 |
+| Koch curve | 線分に突起を足す操作を繰り返した雪の結晶に似た曲線。 |
+| Vicsek (fractal cross) | 十字型に小さいコピーが並ぶ、自己相似な集合。 |
+| Dragon curve | 折り紙の折り目の極限として知られる角ばった平面曲線。 |
+| Lévy C curve | 直角二等辺三角形の斜辺を反復してできる曲線。 |
+| Sierpiński carpet | 正方形に規則的に穴を開けていく、シャギーラグ状のフラクタル。 |
+| Pythagoras tree | 直角三角形と正方形からなる、木の形の有名な図。 |
+| Sierpiński hexagon | 正六角形に沿った穴あきパターン（六角版のシェルピンスキー系）。 |
+| Sierpiński pentagram | 五角形／星形に関係した自己相似パターン。 |
+| Binary fractal tree | 幹から二分岐する樹木状のフラクタル。 |
+| Terdragon curve | 3 本のドラゴン曲線が絡み合う形の、自己相似な曲線。 |
+
+### Preset を適用したあとにいじるもの
+
+- **Depth**  
+  **Result** 左上の **Depth** スライダー（右隣の数値）で再帰の段数を変えられます。上限は **Replica** の個数や **Show generations** の有無から自動で決まります。**Replica** が多いときに **Depth** を上げると描画負荷が急増しやすいです。
+- **Replica**  
+  **Placement** ヘッダの **+ Add** で追加します。**Placement** で枠を掴んで移動・拡縮・回転するか、**Parameters** の **Replica 0** といった見出しの下で X/Y・**Rotation (deg)**・**Scale** を調整します。削除は **Parameters** の **Delete this replica**、**Placement** 上の右クリック、または **-**（選択中の **Replica**）で行えます。
+- **Seed**  
+  **Seed** キャンバス上でドラッグして線分を描き、クリックで選んでからドラッグで線ごと移動・端点移動ができます。**Clear** で全線分を消し、**-** で選択中の 1 本だけ削除します。
+- **Shape**  
+  **Seed** ブロックのヘッダの **Shape** は **Preset** とは別です。線分・正多角形・L 字などの定形を、現在の **Seed** の折れ線の末尾に追加するメニューです（既存の線は残ったまま増えます）。入れ替えたいときは **Clear** してから選ぶとよいです。
+
+### フラクタルの組み立てられ方
+
+各 **Replica** は「いまの図形へ相似変換をかけたもの」を次の段の入力へ足し込みます。**Depth** を 1 ずつ上げると、その変換の木が一段深くなります。
+
+**Show generations** をオンにすると、末端だけでなく**途中の世代の線分も残して描画**します。成長の様子を重ねて見たいときや、**Pythagoras tree** などで枝の広がりを追うのに向きます。オフのときは負荷を抑えつつ、先端付近が強調された見え方になります。
+
+### もう少し踏み込んだ操作
+
+- **スナップ**  
+  バーの **Snap** は「常にグリッドスナップ相当」を Seed の描画に効かせます（内部では Ctrl キーと同じ経路に載せています）。**Shift** を押しながら描くと 45° きりの方向に制限します。Placement パネルでは **Ctrl** を押している間、移動・拡縮・回転に細かいグリッドやステップがかかります（[`placement/mod.rs`](src/ui/canvas/placement/mod.rs) 先頭のコメントに一覧があります）。
+- **Parameters**  
+  各 **Replica** ごとに折りたたみがあり、色は **Result** 上の **Replica** に対応しています。パネル全体を閉じたい場合は **◀** / **▶** や **Parameters** 見出しのトグルで畳めます。
+- **共有**  
+  **Share → Copy link** で状態を符号化した文字列をクリップボードへ入れます。**ブラウザ版**では現在のページを表す**完全な URL**（`?from=share` と `#` 以降の本文）になり、誰かがその URL を開くと同じ図形に戻ります。**ネイティブ版**ではウィンドウにアドレスバーがないため、`?from=share#…` 形式の**相対断片**がコピーされます。`https://halhorn.github.io/fractalium/` と連結して 1 本の URL にするか、ローカルの `trunk serve` のオリジンに貼り付けてください。**Download image** は結果ビューの PNG 出力です（メニューを開くとオフスクリーン取得が走ります）。
+
+---
+
+## ソースから触る（開発・ローカル実行）
+
+リポジトリをビルドして UI をいじったり、モジュールの境界を追ったりする人向けです。画面の説明は上の「試してみる」節を参照してください。
+
+### ネイティブ（Rust）
+
+[`rustup`](https://rustup.rs/) で toolchain を入れてください。本リポジトリの `Cargo.toml` では **Rust 1.85 以上**を想定しています。
 
 ```bash
+rustc --version   # 1.85.0 以降であること
+```
+
+```bash
+git clone https://github.com/halhorn/fractalium.git
+cd fractalium
 cargo run
 ```
 
-### Web（ローカル）
+ビルド済みバイナリだけを配布する形ではないので、初回は依存 crates の取得とコンパイルに時間がかかります。PNG のファイル保存など、OS のダイアログを使う処理はデスクトップ版で利用できます。
+
+### Web をローカルでビルドする場合
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install --locked trunk
-trunk serve   # http://127.0.0.1:8080 をブラウザで開く
+trunk serve
 ```
 
-## 使い方
+`Trunk.toml` に従い、既定ではポート **`8080`**（`0.0.0.0` で待ち受け）です。ブラウザで `http://127.0.0.1:8080/` などを開いてください。
 
-ウィンドウは左から「Edit キャンバス」「Result キャンバス」「Parameters パネル」の 3 領域に分かれている。
+---
 
-### 1. 基本図形を描く（Edit キャンバス）
+## 設計
 
-Edit キャンバス上でマウス左ボタンをドラッグすると直線を引ける。複数本引くことができる。
+モジュールごとに一文の説明を [`src/app/README.md`](src/app/README.md)、[`src/ui/README.md`](src/ui/README.md)、[`src/core/README.md`](src/core/README.md) などにまとめています。全体像だけここに抜粋します。
 
-| 操作 | 効果 |
-|------|------|
-| ドラッグ | 自由な直線を引く |
-| **Ctrl** + ドラッグ | グリッドスナップ（直交 8 等分・等角 6 等分）。四角形・正三角形が正確に描ける |
-| **Shift** + ドラッグ | 45° 単位の角度スナップ |
-| **Cmd+Z** | 直前の操作を元に戻す |
+| レイヤ | 責務の要約 |
+|--------|------------|
+| [`core`](src/core/README.md) | Bevy に依存しない純データ・幾何・再帰予算・種プリセット用データ |
+| [`app`](src/app/README.md) | セッション状態、Undo／プリセット適用・深さクランプ、共有ペイロード、エクスポートのオーケストレーション。ドメイン規則の入口 |
+| [`ui`](src/ui/README.md) | egui によるパネル・レイアウト、各キャンバスの入力。`app` 経由で状態を更新し、プラットフォーム具象には直接触れない |
+| [`ports`](src/ports/README.md) | 共有 URL・履歴・PNG 出口など、環境差し替え用の trait |
+| [`platform`](src/platform/README.md) | `ports` のネイティブ／WASM 実装 |
+| [`encoding`](src/encoding/README.md) | 共有 URL 用のフラットなキー／値表現（構文と符号化） |
+| [`fractal_presets`](src/fractal_presets/README.md) | 全体プリセットの静的定義と一覧（適用手順と境界は `app`） |
+| [`bootstrap`](src/bootstrap/README.md) | Bevy `App` の組み立て、プラグイン順、初期リソースと起動システム |
 
-- 引いた線を全て消したい場合は Parameters パネルの **Clear lines** ボタンを押す
+人間・AI 双方向けのリポジトリ共通指針は [`AGENTS.md`](AGENTS.md) を参照してください。
 
-### 2. 複製ルールを設定する（Parameters パネル）
+---
 
-**+ Add replica** ボタンで複製を追加し、以下のパラメータを編集する:
+## ロードマップ・作業メモ
 
-| パラメータ | 意味 |
-|-----------|------|
-| TX / TY | 複製の平行移動（[-2, 2] の正規化座標） |
-| Rot (deg) | 複製の回転角度（度） |
-| Scale | 複製の拡大縮小（0.05〜2.0） |
+長期・MVP・Web 公開などの計画は [`planning/overall_plan.md`](planning/overall_plan.md)、[`planning/mvp/overall_plan.md`](planning/mvp/overall_plan.md)、[`planning/web_wasm/overall_plan.md`](planning/web_wasm/overall_plan.md) にあります。
 
-複製は何個でも追加でき、不要なものは **Delete this replica** で削除できる。
+---
 
-### 3. フラクタルを確認する（Result キャンバス）
-
-Edit と Parameters の変更はリアルタイムに Result キャンバスへ反映される。**Depth** スライダで再帰の深さ（1〜12）を調整する。
-
-Result キャンバス上でマウスホイールを回すと拡大・縮小できる。
-
-> **注意**: 複製数が多い状態で深さを上げると描画負荷が急増する（複製数 R、深さ N のとき R^(N-1) 本の線を描画）。複製 4 つの場合は depth 9〜10 程度を目安にする。
-
-### フラクタル例: 樹木（Y 字フラクタル）
-
-1. Edit キャンバスに縦線を 1 本引く
-2. 複製を 2 つ追加し、以下に設定:
-   - Replica 0: TX=-0.2, TY=0.3, Rot=25, Scale=0.55
-   - Replica 1: TX=0.2, TY=0.3, Rot=-25, Scale=0.55
-3. Depth を 6〜8 に上げると樹木状のフラクタルが現れる
-
-## Web 版の制約
-
-ブラウザ版はネイティブ版とほぼ同等だが、以下の差異がある。
+## Web 版とネイティブ版の違い（参考）
 
 | 項目 | 内容 |
 |------|------|
-| 初回ロード | WASM バンドル（数 MB）のダウンロードが発生する |
-| Ctrl / Shift キー | モバイルでは **snap grid** トグルボタン（Edit 画面のヘッダー）で代替 |
-| Undo | Mac は **Cmd+Z**、Windows/Android は **Ctrl+Z** |
-| フォント | OS デフォルトの egui フォントを使用（ネイティブ版と見た目が微妙に異なる場合がある） |
-
-## 計画書
-
-開発計画は [`planning/overall_plan.md`](planning/overall_plan.md) を参照。MVP の進行状況は [`planning/mvp/overall_plan.md`](planning/mvp/overall_plan.md) を参照。
+| 配布 | Web は上記 URL から利用可能。ネイティブはローカルビルドまたは各自配布 |
+| キーボード | Seed の Undo は **Ctrl+Z** / **Cmd+Z** の両系統に対応。外付けキーボードのない環境ではバーの **Snap** がグリッド描画の代用になりやすい |
+| フォント | egui の既定フォント依存のため、OS ごとに字形がわずかに異なることがあります |
