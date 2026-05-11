@@ -4,7 +4,7 @@
 
 https://halhorn.github.io/fractalium/
 
-https://github.com/user-attachments/assets/72efb82c-006f-4da5-bf7b-f2ffbdc30293
+https://github.com/user-attachments/assets/f5a62475-04b4-4199-9b43-c4a57725af56
 
 ---
 
