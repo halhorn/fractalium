@@ -160,7 +160,7 @@ pub fn paint_preset_tile_grid(
 
     let mut slots: Vec<(usize, &'static str, TileThumb)> =
         Vec::with_capacity(1 + FractalPreset::ALL.len());
-    slots.push((0, "New workspace", TileThumb::New));
+    slots.push((0, "New Fractal", TileThumb::New));
     for (i, &preset) in FractalPreset::ALL.iter().enumerate() {
         slots.push((i + 1, preset.label(), TileThumb::Preset(preset)));
     }

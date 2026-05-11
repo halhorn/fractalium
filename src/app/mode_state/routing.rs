@@ -1,6 +1,6 @@
 //! メイン編集か全面プリセット選択かだけを表す画面上位モード。
 //!
-//! ワークスペースの [`FractalState`](crate::app::session::FractalState) やキャンバス由来の状態とは名前を混ぜない。
+//! 編集中フラクタルの [`FractalState`](crate::app::session::FractalState) やキャンバス由来の状態とは名前を混ぜない。
 
 use bevy::prelude::States;
 

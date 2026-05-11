@@ -35,9 +35,9 @@ use self::frame::depth_controller::paint_depth_controls;
 use self::frame::layout::{layout_narrow, layout_wide};
 use self::viewport_bridge::{ViewportCamerasMut, egui_rect_to_viewport};
 
-/// [`params_panel`] が毎フレーム触るワークスペース・レイアウト用リソースを束ね、システム引数上限に収める。
+/// [`params_panel`] が毎フレーム触るフラクタル編集・レイアウト用リソースを束ね、システム引数上限に収める。
 #[derive(SystemParam)]
-struct WorkspacePanelUi<'w> {
+struct FractalPanelUi<'w> {
     /// 共有・プリセットの芯となるフラクタル定義。
     fractal: ResMut<'w, FractalState>,
     /// シード／配置グリッドのスナップ。
@@ -100,7 +100,7 @@ fn params_panel(
     mut contexts: EguiContexts,
     mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut workspace: WorkspacePanelUi,
+    mut fractal_panel: FractalPanelUi,
     mut toast: ResMut<EguiToast>,
     mut deferred_toast: ResMut<DeferredToast>,
     mut pending_result_fit: ResMut<PendingResultCameraFit>,
@@ -134,10 +134,10 @@ fn params_panel(
                 ctx,
                 win_w,
                 win_h,
-                &mut workspace.fractal,
-                &mut workspace.undo_stack,
-                &mut workspace.draw_state,
-                &mut workspace.placement,
+                &mut fractal_panel.fractal,
+                &mut fractal_panel.undo_stack,
+                &mut fractal_panel.draw_state,
+                &mut fractal_panel.placement,
                 &mut pending_result_fit,
                 &mut flow.next,
                 &mut flow.thumbs,
@@ -157,12 +157,12 @@ fn params_panel(
                     &mut commands,
                     win_w,
                     win_h,
-                    &mut workspace.fractal,
-                    &mut workspace.snap_grid,
-                    &mut workspace.draw_state,
-                    &mut workspace.undo_stack,
-                    &mut workspace.placement,
-                    &mut workspace.ui_layout,
+                    &mut fractal_panel.fractal,
+                    &mut fractal_panel.snap_grid,
+                    &mut fractal_panel.draw_state,
+                    &mut fractal_panel.undo_stack,
+                    &mut fractal_panel.placement,
+                    &mut fractal_panel.ui_layout,
                     &mut toast,
                     &mut deferred_toast,
                     &mut prepared_png,
@@ -176,12 +176,12 @@ fn params_panel(
                     &mut commands,
                     win_w,
                     win_h,
-                    &mut workspace.fractal,
-                    &mut workspace.snap_grid,
-                    &mut workspace.draw_state,
-                    &mut workspace.undo_stack,
-                    &mut workspace.placement,
-                    &mut workspace.ui_layout,
+                    &mut fractal_panel.fractal,
+                    &mut fractal_panel.snap_grid,
+                    &mut fractal_panel.draw_state,
+                    &mut fractal_panel.undo_stack,
+                    &mut fractal_panel.placement,
+                    &mut fractal_panel.ui_layout,
                     &mut toast,
                     &mut deferred_toast,
                     &mut prepared_png,
@@ -194,7 +194,7 @@ fn params_panel(
     };
 
     if matches!(current_screen, AppScreen::Editing) {
-        paint_depth_controls(ctx, result_egui_rect, &mut workspace.fractal, &mut workspace.layout);
+        paint_depth_controls(ctx, result_egui_rect, &mut fractal_panel.fractal, &mut fractal_panel.layout);
     }
     toast.paint(ctx);
     if let Ok(mut cam) = cameras.edit_cam.single_mut() {
@@ -207,10 +207,10 @@ fn params_panel(
         cam.viewport = egui_rect_to_viewport(result_egui_rect, scale, win_phys);
     }
 
-    workspace.layout.placement_min_x = placement_egui_rect.min.x;
-    workspace.layout.placement_max_x = placement_egui_rect.max.x;
-    workspace.layout.placement_min_y = placement_egui_rect.min.y;
-    workspace.layout.placement_max_y = placement_egui_rect.max.y;
+    fractal_panel.layout.placement_min_x = placement_egui_rect.min.x;
+    fractal_panel.layout.placement_max_x = placement_egui_rect.max.x;
+    fractal_panel.layout.placement_min_y = placement_egui_rect.min.y;
+    fractal_panel.layout.placement_max_y = placement_egui_rect.max.y;
 
     Ok(())
 }

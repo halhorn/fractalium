@@ -4,7 +4,7 @@
 //! [`crate::app::share::ShareNavigation`] と [`crate::app::export::ResultImageOutlet`] に載せて使う。
 //!
 //! ## しないこと
-//! - フラクタル・Undo・共有クエリ符号化。**ワークスペース状態は読まず**、渡されたパラメータを環境へ送るだけ。
+//! - フラクタル・Undo・共有クエリ符号化。**フラクタル状態は読まず**、渡されたパラメータを環境へ送るだけ。
 
 #[cfg(not(target_arch = "wasm32"))]
 mod png_sink_native;

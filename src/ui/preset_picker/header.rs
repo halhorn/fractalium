@@ -18,7 +18,7 @@ pub fn preset_picker_brand_strip(ui: &mut egui::Ui) {
         );
         ui.add_space(4.0);
         ui.label(
-            egui::RichText::new("Choose a starting workspace")
+            egui::RichText::new("Choose a starting fractal")
                 .small()
                 .color(egui::Color32::from_rgb(140, 145, 160)),
         );

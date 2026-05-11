@@ -17,7 +17,7 @@ use crate::app::session::{
     FractalState, PendingResultCameraFit, PlacementDrag, PlacementState, UndoStack,
 };
 #[cfg(target_arch = "wasm32")]
-use crate::app::mode_state::startup::ShareUrlRestoredWorkspace;
+use crate::app::mode_state::startup::ShareUrlRestoredFractal;
 #[cfg(target_arch = "wasm32")]
 use crate::app::share::payload::{decode_readable_share_query, encode_state};
 #[cfg(target_arch = "wasm32")]
@@ -160,9 +160,9 @@ fn flush_share_url_after_fractal_mesh(
     }
 }
 
-/// 初回：`#` の可読共有クエリを復号できたらワークスペース状態をそれにそろえ、周辺の編集 UX を初期化する。
+/// 初回：`#` の可読共有クエリを復号できたらフラクタル状態をそれにそろえ、周辺の編集 UX を初期化する。
 ///
-/// 成功時のみ [`ShareUrlRestoredWorkspace`] を真にし、[Startup](bevy::prelude::Startup) の [`AppScreen`](crate::app::mode_state::AppScreen) 解決へ渡す。
+/// 成功時のみ [`ShareUrlRestoredFractal`] を真にし、[Startup](bevy::prelude::Startup) の [`AppScreen`](crate::app::mode_state::AppScreen) 解決へ渡す。
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn hydrate_from_url(
     platform: Res<PlatformHandles>,
@@ -171,7 +171,7 @@ pub(crate) fn hydrate_from_url(
     mut placement: ResMut<PlacementState>,
     mut draw_state: ResMut<DrawState>,
     mut pending_fit: ResMut<PendingResultCameraFit>,
-    mut url_workspace: ResMut<ShareUrlRestoredWorkspace>,
+    mut url_restored_fractal: ResMut<ShareUrlRestoredFractal>,
 ) {
     let Some(h_trim_owned) = platform.share_navigation.0.current_fragment_body() else {
         return;
@@ -185,7 +185,7 @@ pub(crate) fn hydrate_from_url(
     };
 
     if applied.is_some_and(|r| r.is_ok()) {
-        url_workspace.0 = true;
+        url_restored_fractal.0 = true;
         undo.clear();
         placement.selected = None;
         placement.clipboard = None;

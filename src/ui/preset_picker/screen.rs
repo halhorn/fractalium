@@ -5,7 +5,7 @@ use bevy_egui::egui::{self, emath::GuiRounding as _};
 
 use crate::app::mode_state::AppScreen;
 use crate::app::session::{FractalState, PendingResultCameraFit, PlacementState, UndoStack};
-use crate::app::session_rules::apply_whole_workspace_preset;
+use crate::app::session_rules::apply_whole_fractal_preset;
 use crate::ui::canvas::seed::DrawState;
 
 use super::header::preset_picker_brand_strip;
@@ -87,7 +87,7 @@ pub(crate) fn paint_preset_picker_screen(
                                 &mut picker_sel.0,
                                 &mut needs_focus.0,
                             ) {
-                                apply_whole_workspace_preset(
+                                apply_whole_fractal_preset(
                                     choice,
                                     fractal,
                                     undo,

@@ -1,4 +1,4 @@
-//! Undo / Redo / Snap / Preset / Share のワイド・ナロー共通ツールバー。
+//! Undo / Redo / Snap / Open / Share のワイド・ナロー共通ツールバー。
 
 use bevy::prelude::{Commands, NextState};
 use bevy_egui::egui;
@@ -14,7 +14,7 @@ use crate::app::share::sync::{ShareNavigation, share_url_from_token};
 use crate::ui::canvas::seed::DrawState;
 use crate::ui::feedback::toast::{DeferredToast, EguiToast};
 
-/// undo / redo / snap を並べた操作バー（狭い幅では左側グループが折り返し）。Share は常にバー右端。
+/// undo / redo / snap を左へ並べる（狭い幅では折り返し）。Open と Share は右寄せで Share が最右端。
 #[allow(clippy::too_many_arguments)] // wide / narrow の `layout_*` と同じリソースをそのまま受け渡す。
 pub(crate) fn global_controls_bar(
     ui: &mut egui::Ui,
@@ -59,11 +59,6 @@ pub(crate) fn global_controls_bar(
             }
             if ui.add(snap_btn).clicked() {
                 snap_grid.0 = !snap_grid.0;
-            }
-
-            ui.add_space(6.0);
-            if ui.button("Preset").clicked() {
-                next_app_screen.set(AppScreen::PresetPicker);
             }
         });
 
@@ -123,6 +118,11 @@ pub(crate) fn global_controls_bar(
                     commands.write_message(RequestResultImageExport);
                 }
                 prepared_png.share_menu_was_open = menu_open;
+
+                ui.add_space(6.0);
+                if ui.button("Open").clicked() {
+                    next_app_screen.set(AppScreen::PresetPicker);
+                }
             },
         );
     });

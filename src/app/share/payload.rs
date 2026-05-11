@@ -28,7 +28,7 @@ pub const MAX_DEPTH: u32 = FRACTAL_DEPTH_HARD_CAP;
 /// 版チェック [`SHARE_VERSION`] はクエリ復号側で、`encode` は定数だけ埋める。
 ///
 /// # 引数
-/// - `state` — ワークスペースと同一の状態表現。
+/// - `state` — 編集中フラクタルと同一の状態表現。
 ///
 /// # 戻り値
 /// 許容なら `Ok(())`。エラー文言は破損クエリ／不正状態のログ向け。
@@ -67,7 +67,7 @@ fn validate_fractal_state_readable(state: &FractalState) -> Result<(), String> {
     Ok(())
 }
 
-/// [`TopLevel::decode`](crate::encoding::flat_query_codec::TopLevel::decode) でクエリ本文を復号し、`v` / `depth` / … を [`FractalState`] に反映する（深度はワークスペースルールでクランプ）。
+/// [`TopLevel::decode`](crate::encoding::flat_query_codec::TopLevel::decode) でクエリ本文を復号し、`v` / `depth` / … を [`FractalState`] に反映する（深度は [`crate::app::session_rules`] のルールでクランプ）。
 ///
 /// # 引数
 /// - `query` — `#` 後の本文全体（`v=` で始まることを期待）。
@@ -123,7 +123,7 @@ pub fn decode_readable_share_query(query: &str, state: &mut FractalState) -> Res
 /// `v=…&depth=…&g=…&line=…&replica=…` 形式のフラグメント本文を生成する。
 ///
 /// # 引数
-/// - `state` — 現在のワークスペース状態。
+/// - `state` — 現在のフラクタル状態。
 ///
 /// # 戻り値
 /// `#` なしのクエリ文字列。検証に失敗した場合のみ `Err`。
@@ -198,7 +198,7 @@ fn parse_readable_line(val: &SubLevel) -> Result<[f32; 4], String> {
 /// - `val` — `replica=` の値側。
 ///
 /// # 戻り値
-/// ワークスペース用の複製。スケールはコアの許容レンジへクランプする。欠損やパース失敗時は `Err`。
+/// フラクタル定義用の複製。スケールはコアの許容レンジへクランプする。欠損やパース失敗時は `Err`。
 fn parse_readable_replica(val: &SubLevel) -> Result<Replica, String> {
     let wire = val.decode_to_kv_pairs()?;
     let x = wire.get_f32("x")?;

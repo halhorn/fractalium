@@ -1,4 +1,4 @@
-//! ワークスペース上のフラクタル状態に対するルール（予算に沿った深度など）。
+//! 編集中フラクタル状態に対するルール（予算に沿った深度など）。
 //!
 //! [`crate::core::budget::max_depth_for_budget`] と [`FractalState`] をずらさないため、
 //! URL 復号・プリセット適用・UI のトグル後などはこのモジュールで深度を正規化する。
@@ -50,11 +50,11 @@ pub fn replace_fractal_state(state: &mut FractalState, new_state: FractalState) 
 /// - `undo` — 直前状態を積む。
 /// - `draw` — シード編集をアイドルへ戻す。
 /// - `placement` — 選択とドラッグをリセットする（リンク貼り付けバッファは既存プリセット項目と同様に変更しない）。
-/// - `pending_result_fit` — 結果キャンバスをワークスペースに合わせて再フィットする。
+/// - `pending_result_fit` — 結果キャンバスをフラクタル編集ビューに合わせて再フィットする。
 ///
 /// # 戻り値
 /// なし。
-pub fn apply_whole_workspace_preset(
+pub fn apply_whole_fractal_preset(
     choice: Option<FractalPreset>,
     fractal: &mut FractalState,
     undo: &mut UndoStack,
