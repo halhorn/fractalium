@@ -130,12 +130,26 @@ fn hide_web_loading_overlay() {
     let _ = el.set_attribute("aria-busy", "false");
 }
 
-/// 単位正方形 [-1, 1] x [-1, 1] が常に画面内に収まる正規化直交投影を返す。
+/// Edit / Placement 用の `AutoMin`。Result は `ui::canvas::result::navigation` の `RESULT_ORTHO_AUTOMIN`（2.0）が前提のため、ここでは広げない。
+const EDIT_PLACEMENT_ORTHO_AUTOMIN: f32 = 2.5;
+
+/// 単位正方形 [-1, 1]² が常に画面内に収まる正規化直交投影を返す（Result カメラ用。`RESULT_ORTHO_AUTOMIN` と同じ 2.0）。
 fn normalized_projection() -> Projection {
     Projection::Orthographic(OrthographicProjection {
         scaling_mode: ScalingMode::AutoMin {
             min_width: 2.0,
             min_height: 2.0,
+        },
+        ..OrthographicProjection::default_2d()
+    })
+}
+
+/// Edit / Placement カメラ用。`normalized_projection` より視野をわずかに広げ、枠外配置のレプリカにも余白を確保する。
+fn edit_placement_normalized_projection() -> Projection {
+    Projection::Orthographic(OrthographicProjection {
+        scaling_mode: ScalingMode::AutoMin {
+            min_width: EDIT_PLACEMENT_ORTHO_AUTOMIN,
+            min_height: EDIT_PLACEMENT_ORTHO_AUTOMIN,
         },
         ..OrthographicProjection::default_2d()
     })
@@ -163,7 +177,7 @@ fn spawn_world_cameras(commands: &mut Commands) {
             order: 0,
             ..default()
         },
-        normalized_projection(),
+        edit_placement_normalized_projection(),
         edit_layer(),
     ));
     commands.spawn((
@@ -173,7 +187,7 @@ fn spawn_world_cameras(commands: &mut Commands) {
             order: 1,
             ..default()
         },
-        normalized_projection(),
+        edit_placement_normalized_projection(),
         placement_layer(),
     ));
     commands.spawn((
