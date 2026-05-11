@@ -15,6 +15,7 @@ use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::app::mode_state::AppScreen;
 use crate::app::session::{
     CanvasLayout, DoubleTapZoomActive, FractalState, PlacementDrag, PlacementState, SnapGrid,
     UndoStack,
@@ -223,6 +224,7 @@ fn world_to_egui_pos(
 
 #[allow(clippy::too_many_arguments)]
 fn handle_placement_input(
+    screen: Res<State<AppScreen>>,
     mut state: ResMut<FractalState>,
     mut placement: ResMut<PlacementState>,
     snap_grid: Res<SnapGrid>,
@@ -236,6 +238,12 @@ fn handle_placement_input(
     placement_cam: Query<(&Camera, &GlobalTransform), With<PlacementCamera>>,
     mut contexts: EguiContexts,
 ) {
+    // [`AppScreen::PresetPicker`] 中は配置キャンバスもビューポート無効で全画面扱いになり得るため、
+    // シードと同様に egui スクロール操作が誤入力とならないよう編集画面のみ処理する。
+    if *screen.get() != AppScreen::Editing {
+        return;
+    }
+
     let Ok(window) = windows.single() else {
         return;
     };

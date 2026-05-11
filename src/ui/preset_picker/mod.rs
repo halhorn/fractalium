@@ -12,6 +12,9 @@ pub(super) const PRESET_PANEL_VERTICAL_INNER_MARGIN: f32 = 8.0;
 
 use bevy::prelude::{Resource, ResMut};
 
+use crate::app::session::{PlacementDrag, PlacementState};
+use crate::ui::canvas::seed::DrawState;
+
 pub use thumbnails::{PresetPickerNeedsInitialFocus, PresetThumbnailCache};
 
 pub(crate) use screen::paint_preset_picker_screen;
@@ -21,10 +24,22 @@ pub(crate) use screen::paint_preset_picker_screen;
 pub struct PresetPickerTileSelection(pub usize);
 
 /// `PresetPicker` 入場時に選択インデックスとフォーカス要求をやり直す。
+///
+/// 進行中のシード描画・配置ドラッグは捨てる。全面 UI へ遷移したフレーム以降、
+/// キャンバス入力システムがスキップされると操作が中途半端に残るのを防ぐ。
 pub(crate) fn reset_preset_picker_on_enter(
     mut tiles: ResMut<PresetPickerTileSelection>,
     mut focus: ResMut<PresetPickerNeedsInitialFocus>,
+    mut draw_state: ResMut<DrawState>,
+    mut placement: ResMut<PlacementState>,
 ) {
     tiles.0 = 0;
     focus.0 = true;
+    match *draw_state {
+        DrawState::DrawingLine { .. }
+        | DrawState::MovingLine { .. }
+        | DrawState::MovingEndpoint { .. } => *draw_state = DrawState::Idle,
+        _ => {}
+    }
+    placement.drag = PlacementDrag::Idle;
 }

@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
+use crate::app::mode_state::AppScreen;
 use crate::app::session::{DoubleTapZoomActive, FractalState, SnapGrid, UndoStack};
 use crate::bootstrap::{EditCamera, edit_layer};
 use crate::core::shape::Line;
@@ -184,6 +185,7 @@ fn handle_undo(
 
 #[allow(clippy::too_many_arguments)]
 fn handle_drag_input(
+    screen: Res<State<AppScreen>>,
     mut draw_state: ResMut<DrawState>,
     mut state: ResMut<FractalState>,
     snap_grid: Res<SnapGrid>,
@@ -197,6 +199,12 @@ fn handle_drag_input(
     edit_cam: Query<(&Camera, &GlobalTransform), With<EditCamera>>,
     mut contexts: EguiContexts,
 ) {
+    // Preset 全面 UI 中は Edit ビューポートが無効のまま全画面座標へ写るうえ、
+    // ScrollArea のドラッグでは `is_using_pointer` が立たないことがあり、誤って線が確定する。
+    if *screen.get() != AppScreen::Editing {
+        return;
+    }
+
     let Ok(window) = windows.single() else {
         return;
     };

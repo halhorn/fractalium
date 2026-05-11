@@ -6,6 +6,7 @@ use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::app::mode_state::AppScreen;
 use crate::app::session::{
     CanvasLayout, DoubleTapZoomActive, FractalState, PendingResultCameraFit, PlacementState,
 };
@@ -99,6 +100,22 @@ struct DoubleTapZoomState {
     last_y: f32,
 }
 
+/// 全面 egui オーバーレイ（[`AppScreen::PresetPicker`]）入場時にパン／ピンチ／ダブルタップズームの途中状態を捨てる。
+///
+/// オーバーレイ表示中は [`ViewPlugin`] のビュー操作システムを動かさないため、ここを通らないと
+/// `just_released` を取り逃がし、編集画面復帰後も Result パン等が張り付くことがある。
+fn reset_navigation_gestures_on_fullscreen_overlay(
+    mut pan: ResMut<PanState>,
+    mut pinch: ResMut<PinchState>,
+    mut dtap_state: ResMut<DoubleTapZoomState>,
+    mut dtap_active: ResMut<DoubleTapZoomActive>,
+) {
+    *pan = PanState::default();
+    *pinch = PinchState::default();
+    *dtap_state = DoubleTapZoomState::default();
+    dtap_active.0 = false;
+}
+
 pub struct ViewPlugin;
 
 impl Plugin for ViewPlugin {
@@ -108,6 +125,10 @@ impl Plugin for ViewPlugin {
             .init_resource::<DoubleTapZoomState>()
             .init_resource::<DoubleTapZoomActive>()
             .add_systems(
+                OnEnter(AppScreen::PresetPicker),
+                reset_navigation_gestures_on_fullscreen_overlay,
+            )
+            .add_systems(
                 Update,
                 (
                     zoom_canvas::<EditCamera>,
@@ -116,7 +137,8 @@ impl Plugin for ViewPlugin {
                     handle_pinch_zoom,
                     handle_double_tap_zoom.after(handle_pinch_zoom),
                     pan_result.after(handle_double_tap_zoom),
-                ),
+                )
+                    .run_if(in_state(AppScreen::Editing)),
             );
     }
 }
