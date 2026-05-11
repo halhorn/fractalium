@@ -14,22 +14,22 @@ https://github.com/user-attachments/assets/72efb82c-006f-4da5-bf7b-f2ffbdc30293
 https://halhorn.github.io/fractalium/ にアクセスすると表示するフラクタルを選ぶ画面になります。
 まずはプリセットからフラクタルを表示してみましょう。
 
-| **Preset** メニュー名 | 概要 |
-|----------------------|------|
-| Sierpiński triangle | 正三角形から中央の三角形を繰り返し取り除く古典的フラクタル。 |
-| Koch curve | 線分に突起を足す操作を繰り返した雪の結晶に似た曲線。 |
-| Vicsek (fractal cross) | 十字型に小さいコピーが並ぶ、自己相似な集合。 |
-| Dragon curve | 折り紙の折り目の極限として知られる角ばった平面曲線。 |
-| Lévy C curve | 直角二等辺三角形の斜辺を反復してできる曲線。 |
-| Pythagoras tree | 直角三角形と正方形からなる、木の形の有名な図。 |
-| Sierpiński hexagon | 正六角形に沿った穴あきパターン（六角版のシェルピンスキー系）。 |
-| Sierpiński pentagram | 五角形／星形に関係した自己相似パターン。 |
-| Terdragon curve | 3 本のドラゴン曲線が絡み合う形の、自己相似な曲線。 |
-| hal Cyclone Triangle | 垂直な基線から 2 系の複製で回転の強い構造になる作者作の IFS。 |
-| hal Wing | 水平な基線に 5 複製が置かれたひし形〜翼に近い作者作のパターン。 |
-| hal Tree | 縦長の種から広がる樹枝状の作者作の IFS。 |
-| hal V Star | 短い縦線と 3 複製でつくられる星・V に近い作者作の図形。 |
-| hal Mosaic Window | hal V Star に近い基線から、異なる複製オフセットで窓・モザイク調になる作者作。 |
+| **Preset** メニュー名 | **見本** | 概要 |
+|----------------------|----------|------|
+| Sierpiński triangle | <img src="assets/fractalium/preset_thumbnails/sierpinski_triangle.png" alt="Sierpiński triangle" width="88" /> | 正三角形から中央の三角形を繰り返し取り除く古典的フラクタル。 |
+| Koch curve | <img src="assets/fractalium/preset_thumbnails/koch_curve.png" alt="Koch curve" width="88" /> | 線分に突起を足す操作を繰り返した雪の結晶に似た曲線。 |
+| Vicsek (fractal cross) | <img src="assets/fractalium/preset_thumbnails/vicsek.png" alt="Vicsek" width="88" /> | 十字型に小さいコピーが並ぶ、自己相似な集合。 |
+| Dragon curve | <img src="assets/fractalium/preset_thumbnails/heighway_dragon.png" alt="Dragon curve" width="88" /> | 折り紙の折り目の極限として知られる角ばった平面曲線。 |
+| Lévy C curve | <img src="assets/fractalium/preset_thumbnails/levy_c.png" alt="Lévy C curve" width="88" /> | 直角二等辺三角形の斜辺を反復してできる曲線。 |
+| Pythagoras tree | <img src="assets/fractalium/preset_thumbnails/pythagoras_tree.png" alt="Pythagoras tree" width="88" /> | 直角三角形と正方形からなる、木の形の有名な図。 |
+| Sierpiński hexagon | <img src="assets/fractalium/preset_thumbnails/sierpinski_hexagon.png" alt="Sierpiński hexagon" width="88" /> | 正六角形に沿った穴あきパターン（六角版のシェルピンスキー系）。 |
+| Sierpiński pentagram | <img src="assets/fractalium/preset_thumbnails/sierpinski_star.png" alt="Sierpiński pentagram" width="88" /> | 五角形／星形に関係した自己相似パターン。 |
+| Terdragon curve | <img src="assets/fractalium/preset_thumbnails/terdragon.png" alt="Terdragon curve" width="88" /> | 3 本のドラゴン曲線が絡み合う形の、自己相似な曲線。 |
+| hal Cyclone Triangle | <img src="assets/fractalium/preset_thumbnails/hal_cyclone_triangle.png" alt="hal Cyclone Triangle" width="88" /> | 垂直な基線から 2 系の複製で回転の強い構造になる作者作の IFS。 |
+| hal Wing | <img src="assets/fractalium/preset_thumbnails/hal_wing.png" alt="hal Wing" width="88" /> | 水平な基線に 5 複製が置かれたひし形〜翼に近い作者作のパターン。 |
+| hal Tree | <img src="assets/fractalium/preset_thumbnails/hal_tree.png" alt="hal Tree" width="88" /> | 縦長の種から広がる樹枝状の作者作の IFS。 |
+| hal V Star | <img src="assets/fractalium/preset_thumbnails/hal_v_star.png" alt="hal V Star" width="88" /> | 短い縦線と 3 複製でつくられる星・V に近い作者作の図形。 |
+| hal Mosaic Window | <img src="assets/fractalium/preset_thumbnails/hal_mosaic_window.png" alt="hal Mosaic Window" width="88" /> | hal V Star に近い基線から、異なる複製オフセットで窓・モザイク調になる作者作。 |
 
 選ぶとそのフラクタルが表示されます。
 
