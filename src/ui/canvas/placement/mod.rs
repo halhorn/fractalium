@@ -15,6 +15,7 @@ use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::analytics;
 use crate::app::mode_state::AppScreen;
 use crate::app::session::{
     CanvasLayout, DoubleTapZoomActive, FractalState, PlacementDrag, PlacementState, SnapGrid,
@@ -47,6 +48,11 @@ const PIVOT_ARM: f32 = 0.06;
 const ROTATE_START_THRESHOLD_SQ: f32 = 0.015 * 0.015;
 /// コピペ時の位置オフセット。
 const PASTE_OFFSET: Vec2 = Vec2::new(0.07, -0.07);
+
+/// GA4 カスタムイベント名（Placement 上の ✕ オーバーレイでレプリカを削除）。
+const GA4_EVT_PLACEMENT_DELETE_OVERLAY: &str = "fractalium_placement_delete_overlay";
+/// GA4 イベントパラメータキー（削除するレプリカのインデックス文字列）。
+const GA4_PARAM_REPLICA_INDEX: &str = "replica_index";
 
 // === ギズモグループ ===
 
@@ -748,6 +754,11 @@ fn placement_overlay_ui(
         });
 
     if delete {
+        let sel_str = format!("{sel}");
+        analytics::track_event(
+            GA4_EVT_PLACEMENT_DELETE_OVERLAY,
+            &[(GA4_PARAM_REPLICA_INDEX, sel_str.as_str())],
+        );
         undo_stack.push(state.clone());
         state.replicas.remove(sel);
         placement.selected = None;

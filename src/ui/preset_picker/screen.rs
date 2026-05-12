@@ -3,6 +3,7 @@
 use bevy::prelude::NextState;
 use bevy_egui::egui::{self, emath::GuiRounding as _};
 
+use crate::analytics;
 use crate::app::mode_state::AppScreen;
 use crate::app::session::{FractalState, PendingResultCameraFit, PlacementState, UndoStack};
 use crate::app::session_rules::apply_whole_fractal_preset;
@@ -17,6 +18,13 @@ use super::{
 
 /// 閉じる行・直下のインナー余白（上等し）のみを概算し、ブランド〜タイルまでをスクロール領域に載せるための縦確保。
 const PRESET_HEADER_RESERVE_H: f32 = 60.0 + PRESET_PANEL_VERTICAL_INNER_MARGIN;
+
+/// GA4 カスタムイベント名（プリセットピッカーを閉じる）。
+const GA4_EVT_PRESET_CLOSE: &str = "fractalium_preset_close";
+/// GA4 カスタムイベント名（フラクタル全体プリセットを選択して確定）。
+const GA4_EVT_PRESET_PICK: &str = "fractalium_preset_pick";
+/// GA4 イベントパラメータキー（プリセットの表示名）。
+const GA4_PARAM_PRESET_NAME: &str = "preset_name";
 
 /// プリセット選択 UI をウィンドウ全面に載せ、[AppScreen::Editing](crate::app::mode_state::AppScreen::Editing) と排他となる。
 ///
@@ -50,6 +58,7 @@ pub(crate) fn paint_preset_picker_screen(
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Close").clicked() {
+                                analytics::track_event(GA4_EVT_PRESET_CLOSE, &[]);
                                 next.set(AppScreen::Editing);
                             }
                         });
@@ -84,6 +93,13 @@ pub(crate) fn paint_preset_picker_screen(
                                 &mut picker_sel.0,
                                 &mut needs_focus.0,
                             ) {
+                                let preset_name = choice
+                                    .map(|p| p.label())
+                                    .unwrap_or("New Fractal");
+                                analytics::track_event(
+                                    GA4_EVT_PRESET_PICK,
+                                    &[(GA4_PARAM_PRESET_NAME, preset_name)],
+                                );
                                 apply_whole_fractal_preset(
                                     choice,
                                     fractal,

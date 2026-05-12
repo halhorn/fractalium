@@ -3,12 +3,22 @@
 use bevy::prelude::Vec2;
 use bevy_egui::egui;
 
+use crate::analytics;
 use crate::app::session::{FractalState, UiLayout, UndoStack};
 use crate::core::shape::{REPLICA_SCALE_MAX, REPLICA_SCALE_MIN, Replica};
 use crate::ui::canvas::result::scene::result_replica_color;
 
 /// Parameters の `DragValue` に表示する有効数字の桁数。
 const PARAM_DRAG_VALUE_SIG_FIGS: usize = 6;
+
+/// GA4 カスタムイベント名（Parameters パネルを展開）。
+const GA4_EVT_PARAMS_PANEL_EXPAND: &str = "fractalium_params_panel_expand";
+/// GA4 カスタムイベント名（Parameters パネルを折りたたむ）。
+const GA4_EVT_PARAMS_PANEL_COLLAPSE: &str = "fractalium_params_panel_collapse";
+/// GA4 カスタムイベント名（Parameters からレプリカを削除）。
+const GA4_EVT_PARAMS_DELETE_REPLICA: &str = "fractalium_params_delete_replica";
+/// GA4 イベントパラメータキー（削除するレプリカのインデックス文字列）。
+const GA4_PARAM_REPLICA_INDEX: &str = "replica_index";
 
 /// 折りたたみ状態を含むパラメータパネル全体（wide: 右ドック、narrow: ヘッダのみの切り替えを含む）。
 pub(crate) fn draw_params_panel(
@@ -20,11 +30,13 @@ pub(crate) fn draw_params_panel(
     if ui_layout.params_collapsed {
         if ui.button("▶").clicked() {
             ui_layout.params_collapsed = false;
+            analytics::track_event(GA4_EVT_PARAMS_PANEL_EXPAND, &[]);
         }
     } else {
         ui.horizontal(|ui| {
             if ui.button("◀").clicked() {
                 ui_layout.params_collapsed = true;
+                analytics::track_event(GA4_EVT_PARAMS_PANEL_COLLAPSE, &[]);
             }
             ui.heading("Parameters");
         });
@@ -81,6 +93,8 @@ fn draw_replica_editor(ui: &mut egui::Ui, i: usize, total: usize, replica: &mut 
             scale_row(ui, &mut replica.scale);
             if ui.button("Delete this replica").clicked() {
                 delete_requested = true;
+                let idx = format!("{i}");
+                analytics::track_event(GA4_EVT_PARAMS_DELETE_REPLICA, &[(GA4_PARAM_REPLICA_INDEX, &idx)]);
             }
         });
     delete_requested

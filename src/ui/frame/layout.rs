@@ -3,6 +3,7 @@
 use bevy::prelude::{Commands, NextState};
 use bevy_egui::egui;
 
+use crate::analytics;
 use crate::app::export::{PreparedResultImage, ResultImageOutlet};
 use crate::app::mode_state::AppScreen;
 use crate::app::session::{FractalState, PlacementState, SnapGrid, UiLayout, UndoStack};
@@ -17,6 +18,15 @@ use super::chrome::{
 use super::global_bar::global_controls_bar;
 use super::params::{draw_params_controls, draw_params_panel};
 use super::seed_header::base_shape_header_buttons;
+
+/// GA4 カスタムイベント名（Placement でレプリカを追加）。
+const GA4_EVT_PLACEMENT_ADD_REPLICA: &str = "fractalium_placement_add_replica";
+/// GA4 カスタムイベント名（Placement パネルの − でレプリカを削除）。
+const GA4_EVT_PLACEMENT_REMOVE_REPLICA: &str = "fractalium_placement_remove_replica";
+/// GA4 カスタムイベント名（ナロー下部の Parameters 見出しタップ）。
+const GA4_EVT_PARAMS_STRIP_TOGGLE: &str = "fractalium_params_strip_toggle";
+/// GA4 イベントパラメータキー（`1` = collapsed、`0` = 展開済み）。
+const GA4_PARAM_COLLAPSED: &str = "collapsed";
 
 /// 幅 700px 以上: 左ペイン・中央 Result・右 Parameters。戻り値は (edit, placement, result) の論理矩形。
 #[allow(clippy::too_many_arguments)] // 1 フレーム分のレイアウトに必要なリソースを束ねるだけの関数。
@@ -92,6 +102,7 @@ pub(crate) fn layout_wide(
                     undo_stack.push(state.clone());
                     placement.selected = Some(state.replicas.len());
                     state.replicas.push(Replica::default_new());
+                    analytics::track_event(GA4_EVT_PLACEMENT_ADD_REPLICA, &[]);
                 }
                 let can_del = placement.selected.is_some_and(|i| i < state.replicas.len());
                 let minus = ui.add_enabled(can_del, egui::Button::new("-").small());
@@ -100,6 +111,7 @@ pub(crate) fn layout_wide(
                         undo_stack.push(state.clone());
                         state.replicas.remove(i);
                         placement.selected = None;
+                        analytics::track_event(GA4_EVT_PLACEMENT_REMOVE_REPLICA, &[]);
                     }
                 }
             });
@@ -165,6 +177,13 @@ pub(crate) fn layout_narrow(
             .clicked();
         if header_clicked {
             ui_layout.params_collapsed = !ui_layout.params_collapsed;
+            analytics::track_event(
+                GA4_EVT_PARAMS_STRIP_TOGGLE,
+                &[(
+                    GA4_PARAM_COLLAPSED,
+                    if ui_layout.params_collapsed { "1" } else { "0" },
+                )],
+            );
         }
 
         if !ui_layout.params_collapsed {
@@ -197,6 +216,7 @@ pub(crate) fn layout_narrow(
                         undo_stack.push(state.clone());
                         placement.selected = Some(state.replicas.len());
                         state.replicas.push(Replica::default_new());
+                        analytics::track_event(GA4_EVT_PLACEMENT_ADD_REPLICA, &[]);
                     }
                     let can_del = placement.selected.is_some_and(|i| i < state.replicas.len());
                     let minus = ui.add_enabled_ui(can_del, |ui| step_glyph_button(ui, "-"));
@@ -205,6 +225,7 @@ pub(crate) fn layout_narrow(
                             undo_stack.push(state.clone());
                             state.replicas.remove(i);
                             placement.selected = None;
+                            analytics::track_event(GA4_EVT_PLACEMENT_REMOVE_REPLICA, &[]);
                         }
                     }
                 });

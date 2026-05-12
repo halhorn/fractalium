@@ -3,12 +3,18 @@
 use bevy::prelude::Vec2;
 use bevy_egui::egui;
 
+use crate::analytics;
 use crate::app::session::{CanvasLayout, FractalState, ScreenRect};
 use crate::app::session_rules::clamp_fractal_state_depth;
 use crate::core::budget::max_depth_for_budget;
 
 /// Depth スライダー右隣のドラッグ値・「Show generations」ボタン分を差し引いたスライダー最大幅（論理 px）。
 const DEPTH_SLIDER_RESERVE_OTHER: f32 = 284.0;
+
+/// GA4 カスタムイベント名（Show generations の切り替え）。
+const GA4_EVT_SHOW_GENERATIONS_TOGGLE: &str = "fractalium_show_generations_toggle";
+/// GA4 イベントパラメータキー（`0` / `1` = オフ／オン）。
+const GA4_PARAM_ENABLED: &str = "enabled";
 
 /// Depth / Show generations のオーバーレイを描画し、論理ピクセル矩形を `layout` に書き込む（ワールド入力の貫通防止用）。
 ///
@@ -70,6 +76,13 @@ pub(crate) fn paint_depth_controls(
                     if ui.add(gen_btn).clicked() {
                         state.show_all_generations = !state.show_all_generations;
                         clamp_fractal_state_depth(state);
+                        analytics::track_event(
+                            GA4_EVT_SHOW_GENERATIONS_TOGGLE,
+                            &[(
+                                GA4_PARAM_ENABLED,
+                                if state.show_all_generations { "1" } else { "0" },
+                            )],
+                        );
                     }
                 });
             });

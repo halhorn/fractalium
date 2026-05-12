@@ -3,6 +3,7 @@
 use bevy::prelude::{Commands, NextState};
 use bevy_egui::egui;
 
+use crate::analytics;
 use crate::app::export::{
     ExportPhase, PreparedResultImage, PreparedResultImageState, RequestResultImageExport,
     ResultImageOutlet, deliver_prepared_result_png,
@@ -13,6 +14,23 @@ use crate::app::share::payload::{encode_state, share_sheet_text_for_export};
 use crate::app::share::sync::{ShareNavigation, share_url_from_token};
 use crate::ui::canvas::seed::DrawState;
 use crate::ui::feedback::toast::{DeferredToast, EguiToast};
+
+/// GA4 カスタムイベント名（Undo）。
+const GA4_EVT_UNDO: &str = "fractalium_undo";
+/// GA4 カスタムイベント名（Redo）。
+const GA4_EVT_REDO: &str = "fractalium_redo";
+/// GA4 カスタムイベント名（Snap グリッドのオン／オフ）。
+const GA4_EVT_SNAP_TOGGLE: &str = "fractalium_snap_toggle";
+/// GA4 カスタムイベント名（プリセット一覧を開く）。
+const GA4_EVT_OPEN_PRESET_PICKER: &str = "fractalium_open_preset_picker";
+/// GA4 カスタムイベント名（共有リンクをコピー）。
+const GA4_EVT_SHARE_COPY_LINK: &str = "fractalium_share_copy_link";
+/// GA4 カスタムイベント名（結果 PNG をダウンロード）。
+const GA4_EVT_SHARE_DOWNLOAD_IMAGE: &str = "fractalium_share_download_image";
+/// GA4 イベントパラメータキー（共有ページの完全 URL）。
+const GA4_PARAM_SHARE_URL: &str = "share_url";
+/// GA4 イベントパラメータキー（`0` / `1` = オフ／オン）。
+const GA4_PARAM_ENABLED: &str = "enabled";
 
 /// undo / redo / snap を左へ並べる（狭い幅では折り返し）。Open と Share は右寄せで Share が最右端。
 #[allow(clippy::too_many_arguments)] // wide / narrow の `layout_*` と同じリソースをそのまま受け渡す。
@@ -42,6 +60,7 @@ pub(crate) fn global_controls_bar(
                 if let Some(prev) = undo_stack.undo_pop(state.clone()) {
                     *state = prev;
                 }
+                analytics::track_event(GA4_EVT_UNDO, &[]);
             }
             if ui
                 .add_enabled(undo_stack.can_redo(), egui::Button::new("↪"))
@@ -50,6 +69,7 @@ pub(crate) fn global_controls_bar(
                 if let Some(next) = undo_stack.redo_pop(state.clone()) {
                     *state = next;
                 }
+                analytics::track_event(GA4_EVT_REDO, &[]);
             }
             ui.add_space(6.0);
 
@@ -59,6 +79,13 @@ pub(crate) fn global_controls_bar(
             }
             if ui.add(snap_btn).clicked() {
                 snap_grid.0 = !snap_grid.0;
+                analytics::track_event(
+                    GA4_EVT_SNAP_TOGGLE,
+                    &[(
+                        GA4_PARAM_ENABLED,
+                        if snap_grid.0 { "1" } else { "0" },
+                    )],
+                );
             }
         });
 
@@ -72,6 +99,10 @@ pub(crate) fn global_controls_bar(
                         match encode_state(state) {
                             Ok(token) => match share_url_from_token(share_nav, &token) {
                                 Ok(url) => {
+                                    analytics::track_event(
+                                        GA4_EVT_SHARE_COPY_LINK,
+                                        &[(GA4_PARAM_SHARE_URL, url.as_str())],
+                                    );
                                     ui.ctx().copy_text(url);
                                     toast.show(ui.ctx(), "Link copied");
                                 }
@@ -100,6 +131,18 @@ pub(crate) fn global_controls_bar(
                         .add_enabled(can_download, egui::Button::new(dl_label))
                         .clicked()
                     {
+                        let share_url = encode_state(state)
+                            .ok()
+                            .and_then(|t| share_url_from_token(share_nav, &t).ok());
+                        match share_url.as_ref() {
+                            Some(u) => {
+                                analytics::track_event(
+                                    GA4_EVT_SHARE_DOWNLOAD_IMAGE,
+                                    &[(GA4_PARAM_SHARE_URL, u.as_str())],
+                                );
+                            }
+                            None => analytics::track_event(GA4_EVT_SHARE_DOWNLOAD_IMAGE, &[]),
+                        }
                         deliver_prepared_result_png(
                             png_outlet,
                             prepared_png,
@@ -121,6 +164,7 @@ pub(crate) fn global_controls_bar(
 
                 ui.add_space(6.0);
                 if ui.button("Open").clicked() {
+                    analytics::track_event(GA4_EVT_OPEN_PRESET_PICKER, &[]);
                     next_app_screen.set(AppScreen::PresetPicker);
                 }
             },

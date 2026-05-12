@@ -2,6 +2,7 @@
 //!
 //! 実行バイナリは [`crate::bootstrap`] を起動するのみ。例や将来の統合テストがクレートの型を再利用するために置く。
 
+pub mod analytics;
 pub mod app;
 pub mod bootstrap;
 pub mod core;
