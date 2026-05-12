@@ -1,4 +1,4 @@
-//! Seed（種図形）ブロックのヘッダ: プリセットメニュー・線の削除・全消去。
+//! Seed（種図形）ブロックのヘッダ: Shape プリセット（既存線の置換）・選択線の削除・全消去。
 
 use bevy_egui::egui;
 
@@ -20,6 +20,8 @@ const GA4_PARAM_SHAPE_NAME: &str = "shape_name";
 
 /// Seed ブロックのヘッダ右側: **Shape / - / Clear**（ワイド・ナロー共通）。
 ///
+/// Shape で選んだ基図形プリセットは、既存の線を消してその内容に置き換える（Undo は適用前に積む）。
+///
 /// `minus_compact` が true のとき `-` は [`step_glyph_button`] サイズ（ナロー用）。
 pub(crate) fn base_shape_header_buttons(
     ui: &mut egui::Ui,
@@ -33,7 +35,8 @@ pub(crate) fn base_shape_header_buttons(
         for &preset in BaseShapePreset::ALL {
             if ui.button(preset.label()).clicked() {
                 undo_stack.push(state.clone());
-                state.base_shape.lines.extend(preset.lines());
+                state.base_shape.lines = preset.lines();
+                *draw_state = DrawState::Idle;
                 analytics::track_event(
                     GA4_EVT_SEED_SHAPE_PICK,
                     &[(GA4_PARAM_SHAPE_NAME, preset.label())],
