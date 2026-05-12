@@ -9,14 +9,14 @@ use crate::ui::canvas::seed::DrawState;
 
 use super::chrome::step_glyph_button;
 
-/// GA4 カスタムイベント名（Shape メニューから基図形プリセットを追加）。
-const GA4_EVT_SHAPE_PRESET_APPEND: &str = "fractalium_shape_preset_append";
+/// GA4 カスタムイベント名（Seed の Shape メニューで基図形プリセットを選んだとき）。
+const GA4_EVT_SEED_SHAPE_PICK: &str = "fractalium_seed_shape_pick";
 /// GA4 カスタムイベント名（Seed で選択中の線を削除）。
 const GA4_EVT_SEED_DELETE_LINE: &str = "fractalium_seed_delete_line";
 /// GA4 カスタムイベント名（Seed の線をすべて消去）。
 const GA4_EVT_SEED_CLEAR: &str = "fractalium_seed_clear";
-/// GA4 イベントパラメータキー（プリセットの表示名）。
-const GA4_PARAM_PRESET_NAME: &str = "preset_name";
+/// GA4 イベントパラメータキー（選んだ Shape の表示名）。
+const GA4_PARAM_SHAPE_NAME: &str = "shape_name";
 
 /// Seed ブロックのヘッダ右側: **Shape / - / Clear**（ワイド・ナロー共通）。
 ///
@@ -35,8 +35,8 @@ pub(crate) fn base_shape_header_buttons(
                 undo_stack.push(state.clone());
                 state.base_shape.lines.extend(preset.lines());
                 analytics::track_event(
-                    GA4_EVT_SHAPE_PRESET_APPEND,
-                    &[(GA4_PARAM_PRESET_NAME, preset.label())],
+                    GA4_EVT_SEED_SHAPE_PICK,
+                    &[(GA4_PARAM_SHAPE_NAME, preset.label())],
                 );
                 ui.close();
             }
