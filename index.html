@@ -55,6 +55,7 @@
       gtag('config', 'G-K5TQ3ZECZQ');
     </script>
     <style>
+        /* viewport の scale 指定に加え、ページ全体のブラウザ側ピンチ／ダブルタップズームを抑止する */
         html, body {
             margin: 0;
             padding: 0;
@@ -63,6 +64,7 @@
             background: #141418;
             overflow: hidden;
             overscroll-behavior: none;
+            touch-action: none;
         }
         canvas {
             width: 100%;
