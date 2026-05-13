@@ -125,20 +125,4 @@ trunk serve
 | [`fractal_presets`](src/fractal_presets/README.md) | 全体プリセットの静的定義と一覧（適用手順と境界は `app`） |
 | [`bootstrap`](src/bootstrap/README.md) | Bevy `App` の組み立て、プラグイン順、初期リソースと起動システム |
 
-人間・AI 双方向けのリポジトリ共通指針は [`AGENTS.md`](AGENTS.md) を参照してください。
 
----
-
-## ロードマップ・作業メモ
-
-長期・MVP・Web 公開などの計画は [`planning/overall_plan.md`](planning/overall_plan.md)、[`planning/mvp/overall_plan.md`](planning/mvp/overall_plan.md)、[`planning/web_wasm/overall_plan.md`](planning/web_wasm/overall_plan.md) にあります。
-
----
-
-## Web 版とネイティブ版の違い（参考）
-
-| 項目 | 内容 |
-|------|------|
-| 配布 | Web は上記 URL から利用可能。ネイティブはローカルビルドまたは各自配布 |
-| キーボード | Seed の Undo は **Ctrl+Z** / **Cmd+Z** の両系統に対応。外付けキーボードのない環境ではバーの **Snap** がグリッド描画の代用になりやすい |
-| フォント | egui の既定フォント依存のため、OS ごとに字形がわずかに異なることがあります |
