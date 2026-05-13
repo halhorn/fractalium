@@ -1,9 +1,50 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fractalium</title>
+    <title>Fractalium - Interactive fractal editor</title>
+    <meta name="description" content="Seed の折れ線と Replica を組み合わせ、ブラウザやデスクトップから対話的にフラクタルを編集できます。Depth や複製の変更が Result にすぐ反映されます。">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="halhorn">
+    <link rel="canonical" href="https://halhorn.github.io/fractalium/">
+    <meta name="theme-color" content="#141418">
+
+    <!-- Open Graph（リンク共有時のプレビュー用。og:image は trunk の copy-file で dist へ同梱） -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Fractalium">
+    <meta property="og:title" content="Fractalium - Interactive fractal editor">
+    <meta property="og:description" content="Seed の折れ線と Replica を組み合わせ、ブラウザやデスクトップから対話的にフラクタルを編集できます。Depth や複製の変更が Result にすぐ反映されます。">
+    <meta property="og:url" content="https://halhorn.github.io/fractalium/">
+    <meta property="og:locale" content="ja_JP">
+    <meta property="og:image" content="https://halhorn.github.io/fractalium/fractalium_screenshot.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="2400">
+    <meta property="og:image:height" content="1200">
+    <meta property="og:image:alt" content="Fractalium の UI。左に設定パネル、右に虹色グラデーションのフラクタル（ピタゴラスの木）を表示。">
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Fractalium - Interactive fractal editor">
+    <meta name="twitter:description" content="Seed の折れ線と Replica を組み合わせ、ブラウザやデスクトップから対話的にフラクタルを編集できます。Depth や複製の変更が Result にすぐ反映されます。">
+    <meta name="twitter:image" content="https://halhorn.github.io/fractalium/fractalium_screenshot.png">
+    <meta name="twitter:image:alt" content="Fractalium の UI。左に設定パネル、右に虹色グラデーションのフラクタル（ピタゴラスの木）を表示。">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Fractalium",
+      "screenshot": "https://halhorn.github.io/fractalium/fractalium_screenshot.png",
+      "url": "https://halhorn.github.io/fractalium/",
+      "description": "Seed の折れ線と Replica を組み合わせ、ブラウザやデスクトップから対話的にフラクタルを編集できます。Depth や複製の変更が Result にすぐ反映されます。",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Any",
+      "browserRequirements": "Requires WebGL2.",
+      "inLanguage": "ja"
+    }
+    </script>
+
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-K5TQ3ZECZQ"></script>
     <script>
@@ -68,6 +109,8 @@
         <span>Loading…</span>
     </div>
     <canvas id="fractalium-canvas"></canvas>
+    <!-- SNS プレビュー用。ビルド後 dist 直下に fractalium_screenshot.png として配置される。 -->
+    <link data-trunk rel="copy-file" href="assets/fractalium/fractalium_screenshot.png"/>
     <link data-trunk rel="rust" data-cargo-features="webgl2" data-wasm-opt="z"/>
 </body>
 </html>
